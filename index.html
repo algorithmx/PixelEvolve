@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grid Evolution Simulator - Robust Version</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .control-panel { background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
+        .grid-container { background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%); }
+        .status-bar { background: linear-gradient(90deg, #2563eb 0%, #06b6d4 100%); }
+        .hover-glow:hover { box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
+        .transition-all { transition: all 0.3s ease; }
+        .loading { opacity: 0.5; pointer-events: none; }
+        .error-message { background: #fee2e2; border: 1px solid #ef4444; color: #dc2626; padding: 20px; border-radius: 8px; margin: 20px; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Loading Indicator -->
+    <div id="loading-indicator" class="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg z-50">
+        Initializing...
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-gray-900">Grid Evolution Simulator</h1>
+                    <span class="ml-3 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">Robust v2.0</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-sm text-gray-600">
+                        <span class="font-medium">Step:</span> <span id="step-counter" class="mono font-bold">0</span>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <span class="font-medium">Cost:</span> <span id="cost-display" class="mono font-bold">0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Status Bar -->
+    <div class="status-bar text-white py-2">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <span class="font-medium">Status:</span>
+                    <span id="status-display" class="px-3 py-1 bg-white bg-opacity-20 rounded-full text-sm">Initializing...</span>
+                    <span class="font-medium">Area:</span>
+                    <span id="area-display" class="mono">0 / <span id="target-area">307</span></span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse" id="status-indicator"></div>
+                    <span class="text-sm">Live Status</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            <!-- Grid Visualization -->
+            <div class="lg:col-span-3">
+                <div class="grid-container rounded-lg shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold text-gray-800">Grid Visualization</h2>
+                        <div class="flex space-x-2">
+                            <button id="reset-btn" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all hover-glow">
+                                Reset
+                            </button>
+                            <button id="random-btn" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-all hover-glow">
+                                Random
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Canvas Container -->
+                    <div class="flex justify-center mb-6">
+                        <canvas id="grid-canvas"></canvas>
+                    </div>
+                    
+                    <!-- Control Buttons -->
+                    <div class="flex justify-center space-x-4">
+                        <button id="start-btn" class="px-6 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-all hover-glow">
+                            Start Evolution
+                        </button>
+                        <button id="pause-btn" class="px-6 py-3 bg-yellow-500 text-white rounded-lg font-medium hover:bg-yellow-600 transition-all hover-glow" disabled>
+                            Pause
+                        </button>
+                        <button id="step-btn" class="px-6 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-all hover-glow">
+                            Single Step
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Cost Function Chart -->
+                <div class="mt-8 bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Cost Function Evolution</h3>
+                    <div id="cost-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+            
+            <!-- Control Panel -->
+            <div class="lg:col-span-1">
+                <div class="control-panel rounded-lg shadow-lg p-6 sticky top-8">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-6">Configuration</h2>
+                    
+                    <!-- Grid Size -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Grid Size</label>
+                        <select id="grid-size-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="16">16 × 16</option>
+                            <option value="24">24 × 24</option>
+                            <option value="32" selected>32 × 32</option>
+                            <option value="48">48 × 48</option>
+                            <option value="64">64 × 64</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Evolution Speed -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Evolution Speed: <span id="speed-value" class="mono">100ms</span>
+                        </label>
+                        <input type="range" id="speed-slider" min="50" max="1000" value="100" step="50" 
+                               class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                    <!-- Area Preservation -->
+                    <div class="mb-6">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="area-preservation" checked class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <span class="ml-2 text-sm font-medium text-gray-700">Preserve Area</span>
+                        </label>
+                    </div>
+                    
+                    <!-- Cost Function Weights -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-medium text-gray-700 mb-4">Cost Function Weights</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">
+                                    Edge Sharpness: <span id="edge-weight-value" class="mono">1.0</span>
+                                </label>
+                                <input type="range" id="edge-weight" min="0" max="5" value="1" step="0.1" 
+                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">
+                                    Corner Penalty: <span id="corner-weight-value" class="mono">0.5</span>
+                                </label>
+                                <input type="range" id="corner-weight" min="0" max="5" value="0.5" step="0.1" 
+                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">
+                                    Pattern Penalty: <span id="pattern-weight-value" class="mono">2.0</span>
+                                </label>
+                                <input type="range" id="pattern-weight" min="0" max="5" value="2" step="0.1" 
+                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Preset Configurations -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Presets</label>
+                        <select id="preset-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Select Preset...</option>
+                            <option value="smooth">Smooth Blob</option>
+                            <option value="checkerboard">Checkerboard Test</option>
+                            <option value="random">Random Scatter</option>
+                            <option value="custom">Custom Pattern</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Termination Conditions -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Max Steps: <span id="max-steps-value" class="mono">1000</span>
+                        </label>
+                        <input type="range" id="max-steps" min="100" max="5000" value="1000" step="100" 
+                               class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="text-center text-gray-600">
+                <p class="mb-2">Grid Evolution Simulator - Interactive Cellular Automaton</p>
+                <p class="text-sm">Click cells to toggle states • Configure parameters • Watch evolution optimize patterns</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="robust-grid.js"></script>
+    <script>
+        // Robust initialization with multiple fallback strategies
+        let gridEvolution;
+        let costChart;
+        let initializationAttempts = 0;
+        const MAX_INIT_ATTEMPTS = 5;
+        
+        // Initialize with multiple fallback strategies
+        function initializeApp() {
+            initializationAttempts++;
+            console.log(`Initialization attempt ${initializationAttempts}`);
+            
+            try {
+                // Strategy 1: Direct initialization
+                if (tryInitializeDirect()) {
+                    console.log('Direct initialization successful');
+                    hideLoadingIndicator();
+                    return;
+                }
+                
+                // Strategy 2: Wait for DOM ready
+                if (document.readyState === 'loading') {
+                    console.log('Waiting for DOM to be ready...');
+                    document.addEventListener('DOMContentLoaded', () => {
+                        setTimeout(initializeApp, 100);
+                    });
+                    return;
+                }
+                
+                // Strategy 3: Retry with delay
+                if (initializationAttempts < MAX_INIT_ATTEMPTS) {
+                    console.log(`Retrying initialization in ${initializationAttempts * 200}ms`);
+                    setTimeout(initializeApp, initializationAttempts * 200);
+                } else {
+                    console.error('Max initialization attempts reached');
+                    showInitializationError();
+                    hideLoadingIndicator();
+                }
+                
+            } catch (error) {
+                console.error('Initialization error:', error);
+                if (initializationAttempts < MAX_INIT_ATTEMPTS) {
+                    setTimeout(initializeApp, initializationAttempts * 200);
+                } else {
+                    showInitializationError();
+                    hideLoadingIndicator();
+                }
+            }
+        }
+        
+        function tryInitializeDirect() {
+            try {
+                // Check if canvas exists
+                const canvas = document.getElementById('grid-canvas');
+                if (!canvas) {
+                    console.warn('Canvas element not found');
+                    return false;
+                }
+                
+                console.log('Canvas element found, creating GridEvolution...');
+                
+                // Create GridEvolution instance
+                gridEvolution = new GridEvolution('grid-canvas', {
+                    gridSize: 32,
+                    cellSize: 18,
+                    evolutionSpeed: 100
+                });
+                
+                console.log('GridEvolution created successfully');
+                
+                // Initialize cost chart
+                initializeCostChart();
+                
+                // Bind UI controls
+                bindControls();
+                
+                // Force initial render and UI update
+                setTimeout(() => {
+                    if (gridEvolution && gridEvolution.render) {
+                        gridEvolution.render();
+                        gridEvolution.updateUI();
+                        updateAreaDisplay();
+                        
+                        // Set ready status
+                        updateStatus('Ready');
+                    }
+                }, 100);
+                
+                return true;
+                
+            } catch (error) {
+                console.error('Direct initialization failed:', error);
+                return false;
+            }
+        }
+        
+        function initializeCostChart() {
+            try {
+                const chartDom = document.getElementById('cost-chart');
+                if (!chartDom) {
+                    console.warn('Cost chart element not found');
+                    return;
+                }
+                
+                costChart = echarts.init(chartDom);
+                
+                const option = {
+                    title: {
+                        text: 'Cost Function Over Time',
+                        textStyle: { fontSize: 14, fontWeight: 'normal' }
+                    },
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: 'Step {b}: Cost {c}'
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: [],
+                        name: 'Step'
+                    },
+                    yAxis: {
+                        type: 'value',
+                        name: 'Cost'
+                    },
+                    series: [{
+                        data: [],
+                        type: 'line',
+                        smooth: true,
+                        lineStyle: { color: '#2563eb', width: 2 },
+                        areaStyle: { color: 'rgba(37, 99, 235, 0.1)' }
+                    }],
+                    grid: {
+                        left: '10%',
+                        right: '10%',
+                        bottom: '15%',
+                        top: '15%'
+                    }
+                };
+                
+                costChart.setOption(option);
+            } catch (error) {
+                console.error('Error initializing cost chart:', error);
+            }
+        }
+        
+        function bindControls() {
+            // Start/Pause buttons
+            document.getElementById('start-btn').addEventListener('click', () => {
+                if (gridEvolution) {
+                    gridEvolution.startEvolution();
+                    updateButtonStates();
+                    startChartUpdate();
+                }
+            });
+            
+            document.getElementById('pause-btn').addEventListener('click', () => {
+                if (gridEvolution) {
+                    gridEvolution.stopEvolution();
+                    updateButtonStates();
+                    stopChartUpdate();
+                }
+            });
+            
+            document.getElementById('step-btn').addEventListener('click', () => {
+                if (gridEvolution) {
+                    gridEvolution.evolveStep();
+                    updateCostChart();
+                    updateAreaDisplay();
+                }
+            });
+            
+            // Reset and Random buttons
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                if (gridEvolution) {
+                    gridEvolution.reset();
+                    updateCostChart();
+                    updateAreaDisplay();
+                    updateButtonStates();
+                }
+            });
+            
+            document.getElementById('random-btn').addEventListener('click', () => {
+                if (gridEvolution) {
+                    gridEvolution.randomize();
+                    updateCostChart();
+                    updateAreaDisplay();
+                }
+            });
+            
+            // Grid size
+            document.getElementById('grid-size-select').addEventListener('change', (e) => {
+                if (gridEvolution) {
+                    const newSize = parseInt(e.target.value);
+                    gridEvolution.resizeGrid(newSize);
+                    updateAreaDisplay();
+                    updateCostChart();
+                }
+            });
+            
+            // Evolution speed
+            document.getElementById('speed-slider').addEventListener('input', (e) => {
+                if (gridEvolution) {
+                    const speed = parseInt(e.target.value);
+                    gridEvolution.setEvolutionSpeed(speed);
+                    document.getElementById('speed-value').textContent = speed + 'ms';
+                }
+            });
+            
+            // Area preservation
+            document.getElementById('area-preservation').addEventListener('change', (e) => {
+                if (gridEvolution) {
+                    gridEvolution.areaPreservation = e.target.checked;
+                    gridEvolution.currentCost = gridEvolution.calculateCost();
+                    gridEvolution.updateUI();
+                }
+            });
+            
+            // Cost weights
+            document.getElementById('edge-weight').addEventListener('input', (e) => {
+                if (gridEvolution) {
+                    const value = parseFloat(e.target.value);
+                    gridEvolution.setCostWeight('edgeSharpness', value);
+                    document.getElementById('edge-weight-value').textContent = value.toFixed(1);
+                }
+            });
+            
+            document.getElementById('corner-weight').addEventListener('input', (e) => {
+                if (gridEvolution) {
+                    const value = parseFloat(e.target.value);
+                    gridEvolution.setCostWeight('cornerPenalty', value);
+                    document.getElementById('corner-weight-value').textContent = value.toFixed(1);
+                }
+            });
+            
+            document.getElementById('pattern-weight').addEventListener('input', (e) => {
+                if (gridEvolution) {
+                    const value = parseFloat(e.target.value);
+                    gridEvolution.setCostWeight('patternPenalty', value);
+                    document.getElementById('pattern-weight-value').textContent = value.toFixed(1);
+                }
+            });
+            
+            // Max steps
+            document.getElementById('max-steps').addEventListener('input', (e) => {
+                if (gridEvolution) {
+                    const value = parseInt(e.target.value);
+                    gridEvolution.maxSteps = value;
+                    document.getElementById('max-steps-value').textContent = value;
+                }
+            });
+            
+            // Presets
+            document.getElementById('preset-select').addEventListener('change', (e) => {
+                if (gridEvolution) {
+                    applyPreset(e.target.value);
+                }
+            });
+        }
+        
+        function updateButtonStates() {
+            if (!gridEvolution) return;
+            
+            const startBtn = document.getElementById('start-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const stepBtn = document.getElementById('step-btn');
+            
+            if (gridEvolution.isRunning) {
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                stepBtn.disabled = true;
+                startBtn.classList.add('opacity-50');
+                pauseBtn.classList.remove('opacity-50');
+                stepBtn.classList.add('opacity-50');
+            } else {
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                stepBtn.disabled = false;
+                startBtn.classList.remove('opacity-50');
+                pauseBtn.classList.add('opacity-50');
+                stepBtn.classList.remove('opacity-50');
+            }
+        }
+        
+        function updateAreaDisplay() {
+            if (!gridEvolution) return;
+            
+            const areaElement = document.getElementById('area-display');
+            const targetElement = document.getElementById('target-area');
+            if (areaElement && targetElement) {
+                areaElement.textContent = `${gridEvolution.totalArea.toFixed(1)} / ${gridEvolution.targetArea}`;
+                targetElement.textContent = gridEvolution.targetArea;
+            }
+        }
+        
+        function updateStatus(status) {
+            const statusElement = document.getElementById('status-display');
+            if (statusElement) {
+                statusElement.textContent = status;
+            }
+        }
+        
+        function applyPreset(preset) {
+            if (!gridEvolution) return;
+            
+            gridEvolution.reset();
+            
+            switch(preset) {
+                case 'smooth':
+                    // Create a central blob
+                    const center = Math.floor(gridEvolution.gridSize / 2);
+                    for (let row = center - 3; row <= center + 3; row++) {
+                        for (let col = center - 3; col <= center + 3; col++) {
+                            if (row >= 0 && row < gridEvolution.gridSize && 
+                                col >= 0 && col < gridEvolution.gridSize) {
+                                const distance = Math.sqrt((row - center) ** 2 + (col - center) ** 2);
+                                if (distance < 3) {
+                                    gridEvolution.grid[row][col] = GridEvolution.STATES.FULL;
+                                    gridEvolution.totalArea += 1;
+                                } else if (distance < 4) {
+                                    gridEvolution.grid[row][col] = GridEvolution.STATES.HALF_DIAG_TL_BR;
+                                    gridEvolution.totalArea += 0.5;
+                                }
+                            }
+                        }
+                    }
+                    break;
+                    
+                case 'checkerboard':
+                    // Create checkerboard pattern
+                    for (let row = 0; row < gridEvolution.gridSize; row++) {
+                        for (let col = 0; col < gridEvolution.gridSize; col++) {
+                            if ((row + col) % 2 === 0) {
+                                gridEvolution.grid[row][col] = GridEvolution.STATES.FULL;
+                                gridEvolution.totalArea += 1;
+                            }
+                        }
+                    }
+                    break;
+                    
+                case 'random':
+                    gridEvolution.randomize();
+                    break;
+                    
+                case 'custom':
+                    // User can click to create custom pattern
+                    break;
+            }
+            
+            gridEvolution.currentCost = gridEvolution.calculateCost();
+            gridEvolution.render();
+            gridEvolution.updateUI();
+            updateAreaDisplay();
+            updateCostChart();
+        }
+        
+        let chartUpdateInterval;
+        
+        function updateCostChart() {
+            if (!costChart || !gridEvolution) return;
+            
+            try {
+                const steps = Array.from({length: gridEvolution.costHistory.length}, (_, i) => i);
+                
+                costChart.setOption({
+                    xAxis: { data: steps },
+                    series: [{ data: gridEvolution.costHistory }]
+                });
+            } catch (error) {
+                console.error('Error updating cost chart:', error);
+            }
+        }
+        
+        function startChartUpdate() {
+            if (chartUpdateInterval) return;
+            
+            chartUpdateInterval = setInterval(() => {
+                updateCostChart();
+            }, 500);
+        }
+        
+        function stopChartUpdate() {
+            if (chartUpdateInterval) {
+                clearInterval(chartUpdateInterval);
+                chartUpdateInterval = null;
+            }
+        }
+        
+        function hideLoadingIndicator() {
+            const loading = document.getElementById('loading-indicator');
+            if (loading) {
+                loading.style.display = 'none';
+            }
+        }
+        
+        function showInitializationError() {
+            const container = document.querySelector('.grid-container');
+            if (container) {
+                container.innerHTML = `
+                    <div class="error-message">
+                        <h3>⚠️ Initialization Error</h3>
+                        <p>Could not initialize the grid visualization. This might be due to:</p>
+                        <ul>
+                            <li>Browser doesn't support HTML5 Canvas</li>
+                            <li>JavaScript is disabled</li>
+                            <li>Browser extensions blocking canvas</li>
+                            <li>Network issues loading resources</li>
+                        </ul>
+                        <p><strong>Try:</strong></p>
+                        <ul>
+                            <li>Refresh the page</li>
+                            <li>Use a different browser</li>
+                            <li>Disable browser extensions temporarily</li>
+                            <li>Check browser console for errors</li>
+                        </ul>
+                        <button onclick="location.reload()" style="margin-top: 10px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Reload Page
+                        </button>
+                    </div>
+                `;
+            }
+        }
+        
+        // Global error handlers
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e.error);
+            hideLoadingIndicator();
+        });
+        
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Unhandled promise rejection:', e.reason);
+            hideLoadingIndicator();
+        });
+        
+        // Start initialization when script loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            // DOM is already ready
+            setTimeout(initializeApp, 0);
+        }
+    </script>
+</body>
+</html>
