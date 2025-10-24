@@ -1,6 +1,7 @@
 // Enhanced Energy System - 6-State Aware Convolution Kernels
 
 import { ZebraKernels } from './zebra-kernels.js';
+import { GeometricKernels } from './geometric-kernels.js';
 
 export class EnhancedEnergySystem {
     constructor(gridSize, config = {}) {
@@ -28,10 +29,12 @@ export class EnhancedEnergySystem {
             areaConstraint: 2.5          // Target area maintenance
         };
 
-        // Initialize zebra detection kernels
+        // Initialize all kernel systems
         this.zebraKernels = new ZebraKernels(gridSize, { debugMode: this.debugMode });
+        this.geometricKernels = new GeometricKernels(gridSize);
+        this.geometricKernels.debugMode = this.debugMode;
 
-        this.log('Enhanced energy system initialized with kernel-based zebra detection');
+        this.log('Enhanced energy system initialized with comprehensive kernel-based detection');
     }
 
     // State compatibility matrix - how well different states connect
@@ -83,120 +86,52 @@ export class EnhancedEnergySystem {
         }
     }
 
-    // Calculate total energy with 6-state awareness and kernel-based zebra detection
+    // Calculate total energy with comprehensive kernel-based detection
     calculateEnergy(grid, totalArea, targetArea, states) {
         let totalEnergy = 0;
 
-        // 1. Geometric continuity energy
-        totalEnergy += this.calculateGeometricContinuityEnergy(grid, states);
+        // 1. Kernel-based geometric energy (corners, continuity, flow)
+        const geometricEnergy = this.geometricKernels.calculateGeometricEnergy(
+            grid, states, {
+                corners: this.energyWeights.sharpCorners,
+                continuity: this.energyWeights.geometricContinuity,
+                flow: this.energyWeights.directionalFlow
+            }
+        );
+        totalEnergy += geometricEnergy;
 
-        // 2. Directional flow energy
-        totalEnergy += this.calculateDirectionalFlowEnergy(grid, states);
-
-        // 3. Sharp corners energy
-        totalEnergy += this.calculateSharpCornersEnergy(grid, states);
-
-        // 4. Incompatible connections energy
-        totalEnergy += this.calculateIncompatibleConnectionsEnergy(grid, states);
-
-        // 5. Kernel-based zebra pattern energy
+        // 2. Kernel-based zebra pattern energy
         totalEnergy += this.zebraKernels.calculateZebraEnergy(grid, states, this.energyWeights.zebraPatterns);
 
-        // 6. Area constraint energy
+        // 3. Incompatible connections energy (still analytical - kernel approach not needed)
+        totalEnergy += this.calculateIncompatibleConnectionsEnergy(grid, states);
+
+        // 4. Area constraint energy
         const areaDiff = Math.abs(totalArea - targetArea);
         totalEnergy += areaDiff * this.energyWeights.areaConstraint;
 
-        // Normalize by grid size
-        totalEnergy = totalEnergy / (this.gridSize * this.gridSize);
+        // Note: Geometric energy is already normalized by grid size in GeometricKernels
+        // Zebra energy is also normalized, so we only need to normalize incompatible connections
+        const incompatibleEnergy = totalEnergy - geometricEnergy -
+                                  this.zebraKernels.calculateZebraEnergy(grid, states, this.energyWeights.zebraPatterns) -
+                                  areaDiff * this.energyWeights.areaConstraint;
 
         return totalEnergy;
     }
 
-    // Geometric continuity - favors smooth connections between compatible states
+    // Legacy methods - now replaced by kernel-based approaches in GeometricKernels
+    // Keeping these for backward compatibility and potential hybrid approaches
+
     calculateGeometricContinuityEnergy(grid, states) {
-        let continuityEnergy = 0;
-
-        for (let row = 0; row < this.gridSize; row++) {
-            for (let col = 0; col < this.gridSize; col++) {
-                const currentState = grid[row][col];
-                if (currentState === states.EMPTY) continue;
-
-                const neighbors = this.getNeighborStates(grid, row, col);
-                let compatibilitySum = 0;
-                let neighborCount = 0;
-
-                for (const neighbor of neighbors) {
-                    if (neighbor.state !== states.EMPTY) {
-                        const compatibility = this.getStateCompatibility(currentState, neighbor.state);
-                        compatibilitySum += compatibility;
-                        neighborCount++;
-                    }
-                }
-
-                if (neighborCount > 0) {
-                    const avgCompatibility = compatibilitySum / neighborCount;
-                    continuityEnergy += (1.0 - avgCompatibility) * this.energyWeights.geometricContinuity;
-                }
-            }
-        }
-
-        return continuityEnergy;
+        return this.geometricKernels.detectContinuityIssues(grid, states).total.score * this.energyWeights.geometricContinuity;
     }
 
-    // Directional flow - favors consistent directional patterns
     calculateDirectionalFlowEnergy(grid, states) {
-        let flowEnergy = 0;
-
-        for (let row = 0; row < this.gridSize; row++) {
-            for (let col = 0; col < this.gridSize; col++) {
-                const currentState = grid[row][col];
-                if (!this.isDiagonalState(currentState)) continue;
-
-                const currentDirection = this.getStateDirection(currentState);
-                const neighbors = this.getNeighborStates(grid, row, col);
-
-                let flowConsistency = 0;
-                let diagonalNeighborCount = 0;
-
-                for (const neighbor of neighbors) {
-                    if (this.isDiagonalState(neighbor.state)) {
-                        const neighborDirection = this.getStateDirection(neighbor.state);
-                        const directionSimilarity = this.calculateDirectionSimilarity(
-                            currentDirection, neighborDirection
-                        );
-                        flowConsistency += directionSimilarity;
-                        diagonalNeighborCount++;
-                    }
-                }
-
-                if (diagonalNeighborCount > 0) {
-                    const avgFlowConsistency = flowConsistency / diagonalNeighborCount;
-                    flowEnergy += (1.0 - avgFlowConsistency) * this.energyWeights.directionalFlow;
-                }
-            }
-        }
-
-        return flowEnergy;
+        return this.geometricKernels.detectFlowInconsistencies(grid, states).total.score * this.energyWeights.directionalFlow;
     }
 
-    // Sharp corners - detects geometric corners from state transitions
     calculateSharpCornersEnergy(grid, states) {
-        let cornerEnergy = 0;
-
-        for (let row = 1; row < this.gridSize - 1; row++) {
-            for (let col = 1; col < this.gridSize - 1; col++) {
-                const currentState = grid[row][col];
-                if (currentState === states.EMPTY) continue;
-
-                // Check for corner patterns in 3x3 neighborhood
-                const cornerPatterns = this.detectCornerPatterns(grid, row, col, states);
-                for (const pattern of cornerPatterns) {
-                    cornerEnergy += pattern.sharpness * this.energyWeights.sharpCorners;
-                }
-            }
-        }
-
-        return cornerEnergy;
+        return this.geometricKernels.detectCorners(grid, states).total.score * this.energyWeights.sharpCorners;
     }
 
     // Incompatible connections - penalizes geometrically incompatible state adjacencies
@@ -213,6 +148,32 @@ export class EnhancedEnergySystem {
                     const compatibility = this.getStateCompatibility(currentState, neighbor.state);
                     if (compatibility < 0.3) { // Strong incompatibility threshold
                         incompatibilityEnergy += (0.3 - compatibility) * this.energyWeights.incompatibleConnections;
+                    }
+                }
+            }
+        }
+
+        return incompatibilityEnergy * 0.5; // Half-weight to avoid over-penalization
+    }
+
+    // Calculate incompatible connections energy for a specific region
+    calculateRegionIncompatibleConnections(grid, startRow, endRow, startCol, endCol, states) {
+        let incompatibilityEnergy = 0;
+
+        for (let row = startRow; row <= endRow; row++) {
+            for (let col = startCol; col <= endCol; col++) {
+                const currentState = grid[row][col];
+                if (currentState === states.EMPTY) continue;
+
+                const neighbors = this.getNeighborStates(grid, row, col);
+                for (const neighbor of neighbors) {
+                    // Only count if neighbor is within region to avoid double counting
+                    if (neighbor.row >= startRow && neighbor.row <= endRow &&
+                        neighbor.col >= startCol && neighbor.col <= endCol) {
+                        const compatibility = this.getStateCompatibility(currentState, neighbor.state);
+                        if (compatibility < 0.3) { // Strong incompatibility threshold
+                            incompatibilityEnergy += (0.3 - compatibility) * this.energyWeights.incompatibleConnections;
+                        }
                     }
                 }
             }

@@ -18,6 +18,15 @@
         .transition-all { transition: all 0.3s ease; }
         .loading { opacity: 0.5; pointer-events: none; }
         .error-message { background: #fee2e2; border: 1px solid #ef4444; color: #dc2626; padding: 20px; border-radius: 8px; margin: 20px; }
+
+        /* Modal styles */
+        .modal-backdrop { backdrop-filter: blur(4px); }
+        .modal-content { transform: scale(0.95); opacity: 0; transition: all 0.3s ease; }
+        #kernel-modal:not(.hidden) .modal-content { transform: scale(1); opacity: 1; }
+        .kernel-visualization { transition: transform 0.2s ease; }
+        .kernel-visualization:hover { transform: translateY(-2px); }
+        .template-card { transition: all 0.2s ease; }
+        .template-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -41,6 +50,9 @@
                     <div class="text-xs text-gray-600">
                         <span class="font-medium cost-label">Cost:</span> <span id="cost-display" class="mono font-bold">0.00</span>
                     </div>
+                    <button id="kernel-modal-btn" class="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors" title="View Convolution Kernels">
+                        📊 Kernels
+                    </button>
                 </div>
             </div>
         </div>
@@ -249,11 +261,14 @@
     <script type="module">
         // Import the GridEvolution class
         import { GridEvolution } from './grid-evolution.js';
+        import { KernelModal } from './kernel-modal.js';
+        import { KernelVisualizer } from './kernel-visualizer.js';
 
         // Global variables
         let gridEvolution;
         let costChart;
         let chartUpdateInterval;
+        let kernelModal;
 
         // Initialize application when DOM is ready
         function initializeApp() {
@@ -278,6 +293,11 @@
                 initializeCostChart();
                 bindControls();
                 addResetTemperatureButton();
+
+                // Initialize kernel modal
+                kernelModal = new KernelModal();
+                window.kernelModal = kernelModal; // Make globally accessible
+                bindKernelModal();
 
                 // Initial UI updates
                 updateAreaDisplay();
@@ -348,6 +368,16 @@
                 }
             });
             document.getElementById('annealing-controls').appendChild(resetTempBtn);
+        }
+
+        // Bind kernel modal controls
+        function bindKernelModal() {
+            const kernelModalBtn = document.getElementById('kernel-modal-btn');
+            if (kernelModalBtn && kernelModal) {
+                kernelModalBtn.addEventListener('click', () => {
+                    kernelModal.open();
+                });
+            }
         }
 
         // Control binding
