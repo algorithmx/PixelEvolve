@@ -1,4 +1,4 @@
 *.png
 .claude/
-CLAUDE.md
-x/
+*.md
+
