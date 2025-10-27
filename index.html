@@ -350,13 +350,13 @@
                                         <span
                                             id="cooling-rate-value"
                                             class="mono"
-                                            >0.999</span
+                                            >0.9995</span
                                         >
                                     </label>
                                     <input
                                         type="range"
                                         id="cooling-rate-slider"
-                                        min="0.95"
+                                        min="0.995"
                                         max="0.9999"
                                         value="0.9995"
                                         step="0.0001"
@@ -456,6 +456,72 @@
                                         min="0"
                                         max="5"
                                         value="2.0"
+                                        step="0.1"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        Ising:
+                                        <span
+                                            id="ising-weight-value"
+                                            class="mono"
+                                            >1.0</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="ising-weight"
+                                        min="0"
+                                        max="10"
+                                        value="1.0"
+                                        step="0.1"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        J1 (NN):
+                                        <span
+                                            id="ising-j1-value"
+                                            class="mono"
+                                            >1.0</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="ising-j1"
+                                        min="0"
+                                        max="5"
+                                        value="1.0"
+                                        step="0.1"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        J2 (NNN):
+                                        <span
+                                            id="ising-j2-value"
+                                            class="mono"
+                                            >1.0</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="ising-j2"
+                                        min="0"
+                                        max="5"
+                                        value="1.0"
                                         step="0.1"
                                         class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                     />

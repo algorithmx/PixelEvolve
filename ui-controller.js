@@ -40,6 +40,12 @@ export class UIController {
             neighborWeightValue: '#neighbor-weight-value',
             holeIsolationWeightSlider: '#hole-isolation-weight',
             holeIsolationWeightValue: '#hole-isolation-weight-value',
+            isingWeightSlider: '#ising-weight',
+            isingWeightValue: '#ising-weight-value',
+            isingJ1Slider: '#ising-j1',
+            isingJ1Value: '#ising-j1-value',
+            isingJ2Slider: '#ising-j2',
+            isingJ2Value: '#ising-j2-value',
             presetSelect: '#preset-select',
             maxStepsSlider: '#max-steps',
             maxStepsValue: '#max-steps-value'
@@ -250,6 +256,27 @@ export class UIController {
         }
     }
 
+    updateIsingWeightDisplay(weight) {
+        const element = this.getElement(this.selectors.isingWeightValue);
+        if (element) {
+            element.textContent = weight.toFixed(1);
+        }
+    }
+
+    updateIsingJ1Display(value) {
+        const element = this.getElement(this.selectors.isingJ1Value);
+        if (element) {
+            element.textContent = value.toFixed(1);
+        }
+    }
+
+    updateIsingJ2Display(value) {
+        const element = this.getElement(this.selectors.isingJ2Value);
+        if (element) {
+            element.textContent = value.toFixed(1);
+        }
+    }
+
     // Update max steps display
     updateMaxStepsDisplay(maxSteps) {
         const element = this.getElement(this.selectors.maxStepsValue);
@@ -401,6 +428,30 @@ export class UIController {
             holeIsolationWeightSlider.addEventListener('input', (e) => {
                 const value = parseFloat(e.target.value);
                 handlers.onHoleIsolationWeightChange(value);
+            });
+        }
+
+        const isingWeightSlider = this.getElement(this.selectors.isingWeightSlider);
+        if (isingWeightSlider && handlers.onIsingWeightChange) {
+            isingWeightSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                handlers.onIsingWeightChange(value);
+            });
+        }
+
+        const isingJ1Slider = this.getElement(this.selectors.isingJ1Slider);
+        if (isingJ1Slider && handlers.onIsingJ1Change) {
+            isingJ1Slider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                handlers.onIsingJ1Change(value);
+            });
+        }
+
+        const isingJ2Slider = this.getElement(this.selectors.isingJ2Slider);
+        if (isingJ2Slider && handlers.onIsingJ2Change) {
+            isingJ2Slider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                handlers.onIsingJ2Change(value);
             });
         }
 

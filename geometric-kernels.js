@@ -893,6 +893,280 @@ export class GeometricKernels {
     return totalEnergy;
   }
 
+  // ============================================================================
+  // ISING ENERGY (J1-J2 MODEL)
+  // ============================================================================
+
+  /**
+   * Convert cell state to spin value for Ising model
+   * @param {number} state - Cell state (0-5)
+   * @returns {number} - Spin value: -1 (EMPTY), +1 (FULL), 0 (diagonal half-states)
+   */
+  getSpinValue(state) {
+    if (state === 0) return -1; // EMPTY
+    if (state === 1) return 1;  // FULL
+    return 0; // Diagonal half-states (2-5) are ignored
+  }
+
+  /**
+   * Calculate J1-J2 Ising energy for ferromagnetic coupling
+   * Energy formula: E = -J1 * Σ(s_i * s_j)_nn - J2 * Σ(s_i * s_j)_nnn
+   * where nn = nearest neighbors (4-connected), nnn = next-nearest neighbors (diagonals)
+   * 
+   * @param {Array<Array<number>>} grid - Input grid
+   * @param {Object} states - State definitions
+   * @param {number} J1 - Nearest neighbor coupling constant (default 1.0)
+   * @param {number} J2 - Next-nearest neighbor coupling constant (default 1.0)
+   * @param {Object} boundingBox - Optional bounding box {minRow, maxRow, minCol, maxCol}
+   * @returns {number} - Total Ising energy
+   */
+  calculateIsingEnergy(
+    grid,
+    states,
+    J1 = 1.0,
+    J2 = 1.0,
+    boundingBox = null,
+  ) {
+    const {
+      minRow = 0,
+      maxRow = this.gridSize - 1,
+      minCol = 0,
+      maxCol = this.gridSize - 1,
+    } = boundingBox || {};
+
+    // Nearest neighbor directions (J1: up, down, left, right)
+    const j1Directions = [
+      [-1, 0],  // up
+      [1, 0],   // down
+      [0, -1],  // left
+      [0, 1],   // right
+    ];
+
+    // Next-nearest neighbor directions (J2: diagonals)
+    const j2Directions = [
+      [-1, -1], // top-left
+      [-1, 1],  // top-right
+      [1, -1],  // bottom-left
+      [1, 1],   // bottom-right
+    ];
+
+    let totalEnergy = 0;
+
+    // Iterate through all cells in bounding box
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        const spinI = this.getSpinValue(grid[row][col]);
+        
+        // Skip cells with spin = 0 (diagonal half-states)
+        if (spinI === 0) continue;
+
+        // Calculate J1 interactions (nearest neighbors)
+        for (const [dr, dc] of j1Directions) {
+          const neighborRow = row + dr;
+          const neighborCol = col + dc;
+
+          // Check if neighbor is within grid bounds
+          if (
+            neighborRow >= 0 &&
+            neighborRow < this.gridSize &&
+            neighborCol >= 0 &&
+            neighborCol < this.gridSize
+          ) {
+            const spinJ = this.getSpinValue(grid[neighborRow][neighborCol]);
+            
+            // Only count interaction if neighbor spin is non-zero
+            if (spinJ !== 0) {
+              totalEnergy += -J1 * spinI * spinJ;
+            }
+          }
+        }
+
+        // Calculate J2 interactions (next-nearest neighbors)
+        for (const [dr, dc] of j2Directions) {
+          const neighborRow = row + dr;
+          const neighborCol = col + dc;
+
+          // Check if neighbor is within grid bounds
+          if (
+            neighborRow >= 0 &&
+            neighborRow < this.gridSize &&
+            neighborCol >= 0 &&
+            neighborCol < this.gridSize
+          ) {
+            const spinJ = this.getSpinValue(grid[neighborRow][neighborCol]);
+            
+            // Only count interaction if neighbor spin is non-zero
+            if (spinJ !== 0) {
+              totalEnergy += -J2 * spinI * spinJ;
+            }
+          }
+        }
+      }
+    }
+
+    // Divide by 2 to avoid double-counting pairs
+    return totalEnergy / 2.0;
+  }
+
+  /**
+   * Calculate local Ising energy change for a single cell state change
+   * This is much more efficient than recalculating the entire region
+   * 
+   * @param {Array<Array<number>>} grid - Input grid
+   * @param {Object} states - State definitions
+   * @param {number} row - Row of cell being changed
+   * @param {number} col - Column of cell being changed
+   * @param {number} oldState - Old state of the cell
+   * @param {number} newState - New state of the cell
+   * @param {number} J1 - Nearest neighbor coupling constant
+   * @param {number} J2 - Next-nearest neighbor coupling constant
+   * @returns {number} - Energy change (ΔE)
+   */
+  calculateLocalIsingChange(
+    grid,
+    states,
+    row,
+    col,
+    oldState,
+    newState,
+    J1 = 1.0,
+    J2 = 1.0,
+  ) {
+    const oldSpin = this.getSpinValue(oldState);
+    const newSpin = this.getSpinValue(newState);
+    const deltaSpin = newSpin - oldSpin;
+
+    // If spin doesn't change, no energy change
+    if (deltaSpin === 0) return 0;
+
+    // Nearest neighbor directions (J1)
+    const j1Directions = [
+      [-1, 0],  // up
+      [1, 0],   // down
+      [0, -1],  // left
+      [0, 1],   // right
+    ];
+
+    // Next-nearest neighbor directions (J2)
+    const j2Directions = [
+      [-1, -1], // top-left
+      [-1, 1],  // top-right
+      [1, -1],  // bottom-left
+      [1, 1],   // bottom-right
+    ];
+
+    let deltaEnergy = 0;
+
+    // Calculate J1 contribution
+    for (const [dr, dc] of j1Directions) {
+      const neighborRow = row + dr;
+      const neighborCol = col + dc;
+
+      if (
+        neighborRow >= 0 &&
+        neighborRow < this.gridSize &&
+        neighborCol >= 0 &&
+        neighborCol < this.gridSize
+      ) {
+        const neighborSpin = this.getSpinValue(grid[neighborRow][neighborCol]);
+        if (neighborSpin !== 0) {
+          // ΔE = -J1 * (newSpin * s_j - oldSpin * s_j) = -J1 * Δspin * s_j
+          deltaEnergy += -J1 * deltaSpin * neighborSpin;
+        }
+      }
+    }
+
+    // Calculate J2 contribution
+    for (const [dr, dc] of j2Directions) {
+      const neighborRow = row + dr;
+      const neighborCol = col + dc;
+
+      if (
+        neighborRow >= 0 &&
+        neighborRow < this.gridSize &&
+        neighborCol >= 0 &&
+        neighborCol < this.gridSize
+      ) {
+        const neighborSpin = this.getSpinValue(grid[neighborRow][neighborCol]);
+        if (neighborSpin !== 0) {
+          deltaEnergy += -J2 * deltaSpin * neighborSpin;
+        }
+      }
+    }
+
+    return deltaEnergy;
+  }
+
+  /**
+   * Calculate Ising energy change for a swap between two cells
+   * Handles the special case when swapped cells are J1 or J2 neighbors
+   * 
+   * @param {Array<Array<number>>} grid - Input grid
+   * @param {Object} states - State definitions
+   * @param {Object} cell1 - First cell {row, col}
+   * @param {Object} cell2 - Second cell {row, col}
+   * @param {number} state1 - Current state of cell1
+   * @param {number} state2 - Current state of cell2
+   * @param {number} J1 - Nearest neighbor coupling constant
+   * @param {number} J2 - Next-nearest neighbor coupling constant
+   * @returns {number} - Total energy change for the swap
+   */
+  calculateIsingSwapEnergy(
+    grid,
+    states,
+    cell1,
+    cell2,
+    state1,
+    state2,
+    J1 = 1.0,
+    J2 = 1.0,
+  ) {
+    // Calculate local energy change at each cell
+    let deltaEnergy = 0;
+
+    // Energy change at cell1 (changing from state1 to state2)
+    deltaEnergy += this.calculateLocalIsingChange(
+      grid, states, cell1.row, cell1.col, state1, state2, J1, J2
+    );
+
+    // Energy change at cell2 (changing from state2 to state1)
+    deltaEnergy += this.calculateLocalIsingChange(
+      grid, states, cell2.row, cell2.col, state2, state1, J1, J2
+    );
+
+    // Check if cells are J1 or J2 neighbors - if so, adjust for mutual interaction
+    const rowDiff = Math.abs(cell1.row - cell2.row);
+    const colDiff = Math.abs(cell1.col - cell2.col);
+
+    const spin1 = this.getSpinValue(state1);
+    const spin2 = this.getSpinValue(state2);
+
+    // Only adjust if both spins are non-zero
+    if (spin1 !== 0 && spin2 !== 0) {
+      // Check if they are J1 neighbors (Manhattan distance = 1, not diagonal)
+      if ((rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1)) {
+        // They are J1 neighbors
+        // Before swap: -J1 * spin1 * spin2
+        // After swap:  -J1 * spin2 * spin1 (same)
+        // But we double-counted this interaction in local changes
+        // Need to subtract the double-counted contribution
+        const oldInteraction = -J1 * spin1 * spin2;
+        const newInteraction = -J1 * spin2 * spin1; // Same value
+        // We counted this twice (once from cell1, once from cell2), but it should be 0 change
+        deltaEnergy -= (newInteraction - oldInteraction); // This is 0, but explicit for clarity
+      }
+      // Check if they are J2 neighbors (diagonal neighbors)
+      else if (rowDiff === 1 && colDiff === 1) {
+        // They are J2 neighbors
+        const oldInteraction = -J2 * spin1 * spin2;
+        const newInteraction = -J2 * spin2 * spin1; // Same value
+        deltaEnergy -= (newInteraction - oldInteraction); // This is 0
+      }
+    }
+
+    return deltaEnergy;
+  }
+
   /**
    * Get all kernels organized by category
    * @returns {Object} - All kernels organized by type

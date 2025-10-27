@@ -148,6 +148,12 @@ export class GridEvolution {
         this.setEnergyWeight("neighborEnergy", value),
       onHoleIsolationWeightChange: (value) =>
         this.setEnergyWeight("holesAndIsolation", value),
+      onIsingWeightChange: (value) =>
+        this.setEnergyWeight("isingEnergy", value),
+      onIsingJ1Change: (value) =>
+        this.setIsingJ1(value),
+      onIsingJ2Change: (value) =>
+        this.setIsingJ2(value),
       onMaxStepsChange: (value) => this.setMaxSteps(value),
       onPresetChange: (preset) => this.applyPreset(preset),
     });
@@ -416,6 +422,33 @@ export class GridEvolution {
       this.gridCore.STATES,
     );
     this.updateUI();
+  }
+
+  // Set Ising coupling constants
+  setIsingJ1(value) {
+    this.energySystem.setIsingJ1(value);
+    this.uiController.updateIsingJ1Display(value);
+    // Recalculate current energy
+    this.evolutionEngine.currentEnergy = this.energySystem.calculateEnergy(
+      this.gridCore.grid,
+      this.gridCore.STATES,
+    );
+    this.evolutionEngine.currentCost = this.evolutionEngine.currentEnergy;
+    this.updateUI();
+    this.logDetailed(`Ising J1 coupling set to ${value}`);
+  }
+
+  setIsingJ2(value) {
+    this.energySystem.setIsingJ2(value);
+    this.uiController.updateIsingJ2Display(value);
+    // Recalculate current energy
+    this.evolutionEngine.currentEnergy = this.energySystem.calculateEnergy(
+      this.gridCore.grid,
+      this.gridCore.STATES,
+    );
+    this.evolutionEngine.currentCost = this.evolutionEngine.currentEnergy;
+    this.updateUI();
+    this.logDetailed(`Ising J2 coupling set to ${value}`);
   }
 
   // Preset patterns

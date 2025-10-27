@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PixelEvolve Unit Tests - Headless Runner</title>
+</head>
+<body>
+    <h1>Running Tests...</h1>
+    <pre id="output"></pre>
+    <script type="module">
+        import { runTests } from './tests.js';
+        
+        const outputElement = document.getElementById('output');
+        let testResults = {
+            passed: 0,
+            failed: 0,
+            total: 0,
+            tests: [],
+            startTime: Date.now(),
+            endTime: null
+        };
+        
+        // Capture console output
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            const message = args.join(' ');
+            outputElement.textContent += message + '\n';
+            originalLog.apply(console, args);
+            
+            // Parse test results
+            if (message.includes('✓')) {
+                testResults.passed++;
+                testResults.tests.push({ status: 'PASS', message });
+            } else if (message.includes('✗')) {
+                testResults.failed++;
+                testResults.tests.push({ status: 'FAIL', message });
+            }
+        };
+        
+        console.error = function(...args) {
+            const message = args.join(' ');
+            outputElement.textContent += 'ERROR: ' + message + '\n';
+            originalError.apply(console, args);
+            testResults.tests.push({ status: 'ERROR', message });
+        };
+        
+        // Run tests and expose results globally
+        (async function() {
+            try {
+                const success = await runTests();
+                testResults.endTime = Date.now();
+                testResults.total = testResults.passed + testResults.failed;
+                testResults.success = success;
+                testResults.duration = testResults.endTime - testResults.startTime;
+                
+                // Make results available globally for extraction
+                window.TEST_RESULTS = testResults;
+                
+                // Output JSON results for easy parsing
+                console.log('\n==== TEST RESULTS JSON ====');
+                console.log(JSON.stringify(testResults, null, 2));
+                console.log('==== END TEST RESULTS ====');
+                
+                // Signal completion
+                document.title = success ? 'TESTS_PASSED' : 'TESTS_FAILED';
+                
+            } catch (error) {
+                testResults.endTime = Date.now();
+                testResults.error = error.message;
+                testResults.success = false;
+                window.TEST_RESULTS = testResults;
+                
+                console.error('Test execution failed:', error);
+                document.title = 'TESTS_ERROR';
+            }
+        })();
+    </script>
+</body>
+</html>

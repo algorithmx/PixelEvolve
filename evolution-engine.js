@@ -304,8 +304,23 @@ export class EvolutionEngine {
 
       // Calculate delta with neighbor weight
       const neighborWeight = energySystem.energyWeights.neighborEnergy;
+      
+      // Calculate Ising energy difference (using efficient local calculation)
+      const deltaIsing = energySystem.geometricKernels.calculateIsingSwapEnergy(
+        grid,
+        states,
+        cell1,
+        cell2,
+        state1,
+        state2,
+        energySystem.isingJ1,
+        energySystem.isingJ2
+      );
+      const isingWeight = energySystem.energyWeights.isingEnergy;
+      
       deltaEnergy = (newGeometric + newNeighbor * neighborWeight) - 
-                    (oldGeometric + oldNeighbor * neighborWeight);
+                    (oldGeometric + oldNeighbor * neighborWeight) +
+                    deltaIsing * isingWeight;
     } else {
       // Non-overlapping case: calculate two separate energy differences
       deltaEnergy = this.calculateSeparateEnergyDifferences(
@@ -379,13 +394,26 @@ export class EvolutionEngine {
       tempGrid, states, 2.0, box2
     );
 
-    // Calculate total energy difference with neighbor weights
+    // Calculate Ising energy difference (using efficient local calculation)
+    const deltaIsing = energySystem.geometricKernels.calculateIsingSwapEnergy(
+      grid,
+      states,
+      cell1,
+      cell2,
+      state1,
+      state2,
+      energySystem.isingJ1,
+      energySystem.isingJ2
+    );
+    const isingWeight = energySystem.energyWeights.isingEnergy;
+
+    // Calculate total energy difference with neighbor and Ising weights
     const delta1 = (newGeometric1 + newNeighbor1 * neighborWeight) - 
                    (oldGeometric1 + oldNeighbor1 * neighborWeight);
     const delta2 = (newGeometric2 + newNeighbor2 * neighborWeight) - 
                    (oldGeometric2 + oldNeighbor2 * neighborWeight);
 
-    return delta1 + delta2;
+    return delta1 + delta2 + deltaIsing * isingWeight;
   }
 
   // Temperature cooling schedule
