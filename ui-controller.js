@@ -34,8 +34,10 @@ export class UIController {
             edgeWeightValue: '#edge-weight-value',
             cornerWeightSlider: '#corner-weight',
             cornerWeightValue: '#corner-weight-value',
-                        zebraWeightSlider: '#zebra-weight',
+            zebraWeightSlider: '#zebra-weight',
             zebraWeightValue: '#zebra-weight-value',
+            neighborWeightSlider: '#neighbor-weight',
+            neighborWeightValue: '#neighbor-weight-value',
             holeIsolationWeightSlider: '#hole-isolation-weight',
             holeIsolationWeightValue: '#hole-isolation-weight-value',
             presetSelect: '#preset-select',
@@ -234,6 +236,13 @@ export class UIController {
         }
     }
 
+    updateNeighborWeightDisplay(weight) {
+        const element = this.getElement(this.selectors.neighborWeightValue);
+        if (element) {
+            element.textContent = weight.toFixed(1);
+        }
+    }
+
     updateHoleIsolationWeightDisplay(weight) {
         const element = this.getElement(this.selectors.holeIsolationWeightValue);
         if (element) {
@@ -376,6 +385,14 @@ export class UIController {
             zebraWeightSlider.addEventListener('input', (e) => {
                 const value = parseFloat(e.target.value);
                 handlers.onZebraWeightChange(value);
+            });
+        }
+
+        const neighborWeightSlider = this.getElement(this.selectors.neighborWeightSlider);
+        if (neighborWeightSlider && handlers.onNeighborWeightChange) {
+            neighborWeightSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                handlers.onNeighborWeightChange(value);
             });
         }
 
@@ -597,6 +614,10 @@ export class UIController {
             this.updateZebraWeightDisplay(data.zebraWeight);
         }
 
+        if (data.neighborWeight !== undefined) {
+            this.updateNeighborWeightDisplay(data.neighborWeight);
+        }
+
         if (data.holeIsolationWeight !== undefined) {
             this.updateHoleIsolationWeightDisplay(data.holeIsolationWeight);
         }
@@ -612,7 +633,8 @@ export class UIController {
             areaPreservation: this.getElement(this.selectors.areaPreservationCheckbox)?.checked !== false,
             edgeWeight: parseFloat(this.getElement(this.selectors.edgeWeightSlider)?.value || '2.5'),
             cornerWeight: parseFloat(this.getElement(this.selectors.cornerWeightSlider)?.value || '1.8'),
-                        zebraWeight: parseFloat(this.getElement(this.selectors.zebraWeightSlider)?.value || '2.5'),
+            zebraWeight: parseFloat(this.getElement(this.selectors.zebraWeightSlider)?.value || '2.5'),
+            neighborWeight: parseFloat(this.getElement(this.selectors.neighborWeightSlider)?.value || '2.0'),
             holeIsolationWeight: parseFloat(this.getElement(this.selectors.holeIsolationWeightSlider)?.value || '2.5'),
             maxSteps: parseInt(this.getElement(this.selectors.maxStepsSlider)?.value || '1000')
         };

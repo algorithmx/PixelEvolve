@@ -328,16 +328,16 @@
                                         <span
                                             id="temperature-value"
                                             class="mono"
-                                            >1.000</span
+                                            >10.000</span
                                         >
                                     </label>
                                     <input
                                         type="range"
                                         id="temperature-slider"
                                         min="0.001"
-                                        max="5"
-                                        value="1.000"
-                                        step="0.001"
+                                        max="50"
+                                        value="10.000"
+                                        step="0.01"
                                         class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                     />
                                 </div>
@@ -350,23 +350,22 @@
                                         <span
                                             id="cooling-rate-value"
                                             class="mono"
-                                            >0.995</span
+                                            >0.999</span
                                         >
                                     </label>
                                     <input
                                         type="range"
                                         id="cooling-rate-slider"
-                                        min="0.9"
-                                        max="0.999"
-                                        value="0.995"
-                                        step="0.001"
+                                        min="0.95"
+                                        max="0.9999"
+                                        value="0.9995"
+                                        step="0.0001"
                                         class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        
                         <!-- Enhanced Energy Function Weights -->
                         <div class="mb-3">
                             <h3 class="text-sm font-medium text-gray-700 mb-2">
@@ -396,7 +395,6 @@
                                     />
                                 </div>
 
-                                
                                 <div>
                                     <label
                                         class="block text-xs font-medium text-gray-600 mb-1"
@@ -436,6 +434,28 @@
                                         min="0"
                                         max="5"
                                         value="2.5"
+                                        step="0.1"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        Neighbor:
+                                        <span
+                                            id="neighbor-weight-value"
+                                            class="mono"
+                                            >2.0</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="neighbor-weight"
+                                        min="0"
+                                        max="5"
+                                        value="2.0"
                                         step="0.1"
                                         class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                     />
@@ -587,8 +607,10 @@
                     if (gridEvolution) {
                         gridEvolution.resetTemperature();
                         // Reset to the UI slider's current value, not hardcoded 1.0
-                        const slider = document.getElementById("temperature-slider");
-                        const valueDisplay = document.getElementById("temperature-value");
+                        const slider =
+                            document.getElementById("temperature-slider");
+                        const valueDisplay =
+                            document.getElementById("temperature-value");
                         if (slider && valueDisplay) {
                             // Get the actual initial temperature from the evolution engine
                             const initialTemp = gridEvolution.getTemperature();

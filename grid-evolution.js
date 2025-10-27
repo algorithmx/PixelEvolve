@@ -144,6 +144,8 @@ export class GridEvolution {
         this.setEnergyWeight("sharpCorners", value),
       onZebraWeightChange: (value) =>
         this.setEnergyWeight("zebraPatterns", value),
+      onNeighborWeightChange: (value) =>
+        this.setEnergyWeight("neighborEnergy", value),
       onHoleIsolationWeightChange: (value) =>
         this.setEnergyWeight("holesAndIsolation", value),
       onMaxStepsChange: (value) => this.setMaxSteps(value),

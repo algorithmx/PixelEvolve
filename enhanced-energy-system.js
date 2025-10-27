@@ -23,6 +23,7 @@ export class EnhancedEnergySystem {
       geometricContinuity: 2.5, // Smooth geometric connections
       sharpCorners: 2.0, // Sharp geometric corners
       zebraPatterns: 2.5, // Kernel-based zebra pattern penalties
+      neighborEnergy: 2.0, // Neighbor interaction energy (penalizes isolated cells)
     };
 
     // Initialize kernel system (now includes zebra patterns)
@@ -95,7 +96,19 @@ export class EnhancedEnergySystem {
       fullGridBoundingBox
     );
 
-    return geometricEnergy;
+    // Calculate neighbor interaction energy (penalizes isolated cells, encourages clustering)
+    const neighborInteractionEnergy = this.geometricKernels.calculateNeighborInteractionEnergy(
+      grid,
+      states,
+      2.0, // scale parameter for exponential
+      fullGridBoundingBox
+    );
+
+    // Combine energies with weights
+    const totalEnergy = geometricEnergy + 
+                       (neighborInteractionEnergy * this.energyWeights.neighborEnergy);
+
+    return totalEnergy;
   }
 
   // Helper methods

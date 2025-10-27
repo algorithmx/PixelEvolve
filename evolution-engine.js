@@ -264,7 +264,8 @@ export class EvolutionEngine {
       tempGrid[cell1.row][cell1.col] = state2;
       tempGrid[cell2.row][cell2.col] = state1;
 
-      const oldEnergy = energySystem.geometricKernels.calculateGeometricEnergy(
+      // Calculate old energies (geometric + neighbor)
+      const oldGeometric = energySystem.geometricKernels.calculateGeometricEnergy(
         grid,
         states,
         {
@@ -275,7 +276,15 @@ export class EvolutionEngine {
         combinedBox
       );
 
-      const newEnergy = energySystem.geometricKernels.calculateGeometricEnergy(
+      const oldNeighbor = energySystem.geometricKernels.calculateNeighborInteractionEnergy(
+        grid,
+        states,
+        2.0,
+        combinedBox
+      );
+
+      // Calculate new energies (geometric + neighbor)
+      const newGeometric = energySystem.geometricKernels.calculateGeometricEnergy(
         tempGrid,
         states,
         {
@@ -286,7 +295,17 @@ export class EvolutionEngine {
         combinedBox
       );
 
-      deltaEnergy = newEnergy - oldEnergy;
+      const newNeighbor = energySystem.geometricKernels.calculateNeighborInteractionEnergy(
+        tempGrid,
+        states,
+        2.0,
+        combinedBox
+      );
+
+      // Calculate delta with neighbor weight
+      const neighborWeight = energySystem.energyWeights.neighborEnergy;
+      deltaEnergy = (newGeometric + newNeighbor * neighborWeight) - 
+                    (oldGeometric + oldNeighbor * neighborWeight);
     } else {
       // Non-overlapping case: calculate two separate energy differences
       deltaEnergy = this.calculateSeparateEnergyDifferences(
@@ -328,24 +347,45 @@ export class EvolutionEngine {
       zebra: energySystem.energyWeights.zebraPatterns,
     };
 
-    // Calculate energy difference for box1 (only cell1 affects this box)
-    const oldEnergy1 = energySystem.geometricKernels.calculateGeometricEnergy(
+    const neighborWeight = energySystem.energyWeights.neighborEnergy;
+
+    // Calculate energy difference for box1 (geometric + neighbor)
+    const oldGeometric1 = energySystem.geometricKernels.calculateGeometricEnergy(
       grid, states, energyWeights, box1
     );
-    const newEnergy1 = energySystem.geometricKernels.calculateGeometricEnergy(
+    const oldNeighbor1 = energySystem.geometricKernels.calculateNeighborInteractionEnergy(
+      grid, states, 2.0, box1
+    );
+
+    const newGeometric1 = energySystem.geometricKernels.calculateGeometricEnergy(
       tempGrid, states, energyWeights, box1
     );
+    const newNeighbor1 = energySystem.geometricKernels.calculateNeighborInteractionEnergy(
+      tempGrid, states, 2.0, box1
+    );
 
-    // Calculate energy difference for box2 (only cell2 affects this box)
-    const oldEnergy2 = energySystem.geometricKernels.calculateGeometricEnergy(
+    // Calculate energy difference for box2 (geometric + neighbor)
+    const oldGeometric2 = energySystem.geometricKernels.calculateGeometricEnergy(
       grid, states, energyWeights, box2
     );
-    const newEnergy2 = energySystem.geometricKernels.calculateGeometricEnergy(
-      tempGrid, states, energyWeights, box2
+    const oldNeighbor2 = energySystem.geometricKernels.calculateNeighborInteractionEnergy(
+      grid, states, 2.0, box2
     );
 
-    // Total energy difference is the sum of both regions
-    return (newEnergy1 - oldEnergy1) + (newEnergy2 - oldEnergy2);
+    const newGeometric2 = energySystem.geometricKernels.calculateGeometricEnergy(
+      tempGrid, states, energyWeights, box2
+    );
+    const newNeighbor2 = energySystem.geometricKernels.calculateNeighborInteractionEnergy(
+      tempGrid, states, 2.0, box2
+    );
+
+    // Calculate total energy difference with neighbor weights
+    const delta1 = (newGeometric1 + newNeighbor1 * neighborWeight) - 
+                   (oldGeometric1 + oldNeighbor1 * neighborWeight);
+    const delta2 = (newGeometric2 + newNeighbor2 * neighborWeight) - 
+                   (oldGeometric2 + oldNeighbor2 * neighborWeight);
+
+    return delta1 + delta2;
   }
 
   // Temperature cooling schedule

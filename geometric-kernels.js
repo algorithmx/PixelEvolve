@@ -12,8 +12,9 @@ export class GeometricKernels {
     this.cornerKernels = this.initializeCornerKernels();
     this.continuityKernels = this.initializeContinuityKernels();
     this.zebraKernels = this.initializeZebraKernels();
+    this.neighborKernels = this.initializeNeighborKernels();
 
-    this.log("Geometric kernels initialized with zebra pattern detection");
+    this.log("Geometric kernels initialized with zebra pattern detection and neighbor interaction");
   }
 
   // ============================================================================
@@ -236,6 +237,27 @@ export class GeometricKernels {
   }
 
   // ============================================================================
+  // NEIGHBOR INTERACTION KERNELS
+  // ============================================================================
+
+  /**
+   * Initialize kernels for detecting neighbor interactions (clustering energy)
+   */
+  initializeNeighborKernels() {
+    return {
+      // 8-neighbor sum kernel for counting occupied neighbors
+      neighborSum: {
+        kernel: [
+          [1, 1, 1],
+          [1, 0, 1],
+          [1, 1, 1],
+        ],
+        description: "Counts occupied neighbors for interaction energy",
+      },
+    };
+  }
+
+  // ============================================================================
   // CORE KERNEL APPLICATION METHODS
   // ============================================================================
 
@@ -279,9 +301,11 @@ export class GeometricKernels {
    * @param {Array<Array<number>>} grid - Input grid
    * @param {Object} kernelInfo - Kernel object with kernel array and description
    * @param {Object} boundingBox - Optional bounding box {minRow, maxRow, minCol, maxCol}
+   * @param {Function} postProcessor - Optional function to post-process convolution response
+   *                                    Signature: (response, row, col, grid) => processedValue
    * @returns {Array<Array<number>>} - Convolution result
    */
-  applyKernel(grid, kernelInfo, boundingBox = null, useAbs = false) {
+  applyKernel(grid, kernelInfo, boundingBox = null, postProcessor = null) {
     const kernel = kernelInfo.kernel;
     const kHeight = kernel.length;
     const kWidth = kernel[0].length;
@@ -310,7 +334,8 @@ export class GeometricKernels {
           row,
           col,
         );
-        result[row][col] = useAbs ? Math.abs(response) : response;
+        // Apply post-processor if provided, otherwise use raw response
+        result[row][col] = postProcessor ? postProcessor(response, row, col, grid) : response;
       }
     }
 
@@ -330,8 +355,8 @@ export class GeometricKernels {
     return this.applyKernel(
       grid,
       kernelInfo,
-      (boundingBox = boundingBox),
-      (useAbs = true),
+      boundingBox,
+      Math.abs
     );
   }
 
@@ -398,7 +423,7 @@ export class GeometricKernels {
 
     const generalCorners = (() => {
       const kernel = this.cornerKernels.cornerDetector;
-      const convResult = this.applyKernel(grid, kernel, true, boundingBox);
+      const convResult = this.applyKernel(grid, kernel, boundingBox, Math.abs);
       return this.analyzeConvolutionResult(
         convResult,
         1.0,
@@ -476,7 +501,7 @@ export class GeometricKernels {
 
     const overall = (() => {
       const kernel = this.continuityKernels.eightWayContinuity;
-      const convResult = this.applyKernel(grid, kernel, true, boundingBox);
+      const convResult = this.applyKernel(grid, kernel, boundingBox, Math.abs);
       return this.analyzeConvolutionResult(
         convResult,
         0.8,
@@ -684,7 +709,7 @@ export class GeometricKernels {
       .map(() => Array(this.gridSize).fill(0));
 
     for (const kernelInfo of kernels) {
-      const convResult = this.applyKernel(grid, kernelInfo, true, boundingBox);
+      const convResult = this.applyKernel(grid, kernelInfo, boundingBox, Math.abs);
 
       // Keep track of maximum response across all kernels
       const {
@@ -815,6 +840,60 @@ export class GeometricKernels {
   }
 
   /**
+   * Calculate neighbor interaction energy to penalize isolated cells
+   * Uses exponential penalty: isolated cells (fewer neighbors) have higher penalty
+   * @param {Array<Array<number>>} grid - Input grid
+   * @param {Object} states - State definitions
+   * @param {number} scale - Scale parameter for exponential (default 2.0)
+   * @param {Object} boundingBox - Optional bounding box {minRow, maxRow, minCol, maxCol}
+   * @returns {number} - Total neighbor interaction energy
+   */
+  calculateNeighborInteractionEnergy(
+    grid,
+    states,
+    scale = 2.0,
+    boundingBox = null,
+  ) {
+    // Post-processor function: applies exponential penalty based on neighbor count
+    const postProcessor = (neighborCount, row, col, grid) => {
+      // Only apply penalty to occupied cells (not empty cells)
+      if (grid[row][col] !== states.EMPTY) {
+        // Exponential penalty: exp(-neighborCount / scale)
+        // Isolated cells (0-1 neighbors): high penalty (~1.0 - 0.61)
+        // Moderately connected (2-4 neighbors): medium penalty (~0.37 - 0.14)
+        // Well-connected (5-8 neighbors): low penalty (~0.08 - 0.02)
+        return Math.exp(-neighborCount / scale);
+      }
+      return 0;
+    };
+
+    // Apply kernel with exponential post-processor
+    const penalties = this.applyKernel(
+      grid,
+      this.neighborKernels.neighborSum,
+      boundingBox,
+      postProcessor,
+    );
+
+    // Sum all penalty values within bounding box
+    let totalEnergy = 0;
+    const {
+      minRow = 0,
+      maxRow = this.gridSize - 1,
+      minCol = 0,
+      maxCol = this.gridSize - 1,
+    } = boundingBox || {};
+
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        totalEnergy += penalties[row][col];
+      }
+    }
+
+    return totalEnergy;
+  }
+
+  /**
    * Get all kernels organized by category
    * @returns {Object} - All kernels organized by type
    */
@@ -823,6 +902,7 @@ export class GeometricKernels {
       corners: this.cornerKernels,
       continuity: this.continuityKernels,
       zebra: this.zebraKernels,
+      neighbor: this.neighborKernels,
     };
   }
 
