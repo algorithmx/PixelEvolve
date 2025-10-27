@@ -13,9 +13,9 @@ export class EvolutionEngine {
     this.evolutionSpeed = config.evolutionSpeed || 2;
     this.areaPreservation = config.areaPreservation !== false;
 
-    // Simulated annealing parameters
-    this.temperature = 1.0;
-    this.initialTemperature = 1.0;
+    // Simulated annealing parameters - use UI temperature as single source of truth
+    this.temperature = config.temperature || 1.0;
+    this.initialTemperature = this.temperature;
     this.coolingRate = config.coolingRate || 0.995;
     this.minTemperature = config.minTemperature || 0.001;
 
@@ -28,20 +28,24 @@ export class EvolutionEngine {
   }
 
   // Initialize simulated annealing
-  initializeSimulatedAnnealing(energySystem, grid, states) {
+  initializeSimulatedAnnealing(energySystem, grid, states, initialTemperature = null) {
     if (!energySystem) {
       throw new Error("EnergySystem required for simulated annealing");
     }
 
-    // Set initial temperature based on current energy
+    // Calculate current energy
     this.currentEnergy = energySystem.calculateEnergy(grid, states);
-    this.initialTemperature = Math.max(0.1, this.currentEnergy * 0.5);
-    this.temperature = this.initialTemperature;
 
-    this.log(
-      "Simulated annealing initialized with temperature:",
-      this.temperature,
-    );
+    // Use provided temperature from UI, or keep existing temperature as fallback
+    if (initialTemperature !== null && !isNaN(initialTemperature)) {
+      this.temperature = parseFloat(initialTemperature);
+      this.initialTemperature = this.temperature;
+      this.log("Simulated annealing initialized with UI temperature:", this.temperature);
+    } else {
+      // Keep existing temperature if no UI temperature provided
+      this.initialTemperature = this.temperature;
+      this.log("Simulated annealing initialized with existing temperature:", this.temperature);
+    }
   }
 
   // Single step of simulated annealing evolution with area-preserving swaps
@@ -218,7 +222,7 @@ export class EvolutionEngine {
     return reservoir[randomIndex];
   }
 
-  // Calculate energy difference for a swap operation - optimized to use only affected area
+  // Calculate energy difference for a swap operation - optimized with two bounding boxes
   calculateSwapEnergyDifference(
     grid,
     energySystem,
@@ -231,50 +235,117 @@ export class EvolutionEngine {
     // Maximum kernel radius is 2 (for 5x5 kernels), so affected area is radius 2 around both cells
     const affectedRadius = 2;
 
-    // Calculate combined affected region for both swapped cells
-    const minRow = Math.max(0, Math.min(cell1.row, cell2.row) - affectedRadius);
-    const maxRow = Math.min(
-      this.gridSize - 1,
-      Math.max(cell1.row, cell2.row) + affectedRadius,
-    );
-    const minCol = Math.max(0, Math.min(cell1.col, cell2.col) - affectedRadius);
-    const maxCol = Math.min(
-      this.gridSize - 1,
-      Math.max(cell1.col, cell2.col) + affectedRadius,
-    );
+    // Create individual bounding boxes for each cell
+    const box1 = {
+      minRow: Math.max(0, cell1.row - affectedRadius),
+      maxRow: Math.min(this.gridSize - 1, cell1.row + affectedRadius),
+      minCol: Math.max(0, cell1.col - affectedRadius),
+      maxCol: Math.min(this.gridSize - 1, cell1.col + affectedRadius),
+    };
 
-    // Create bounding box for the affected region
-    const boundingBox = { minRow, maxRow, minCol, maxCol };
+    const box2 = {
+      minRow: Math.max(0, cell2.row - affectedRadius),
+      maxRow: Math.min(this.gridSize - 1, cell2.row + affectedRadius),
+      minCol: Math.max(0, cell2.col - affectedRadius),
+      maxCol: Math.min(this.gridSize - 1, cell2.col + affectedRadius),
+    };
 
-    // Create temporary grid with the swap applied (only needed for energy calculation)
+    // Check if bounding boxes overlap
+    const boxesOverlap = this.boundingBoxesOverlap(box1, box2);
+
+    let deltaEnergy;
+
+    if (boxesOverlap) {
+      // Overlapping case: use combined bounding box (original approach)
+      const combinedBox = this.combineBoundingBoxes(box1, box2);
+
+      // Create temporary grid with the swap applied
+      const tempGrid = grid.map((r) => [...r]);
+      tempGrid[cell1.row][cell1.col] = state2;
+      tempGrid[cell2.row][cell2.col] = state1;
+
+      const oldEnergy = energySystem.geometricKernels.calculateGeometricEnergy(
+        grid,
+        states,
+        {
+          corners: energySystem.energyWeights.sharpCorners,
+          continuity: energySystem.energyWeights.geometricContinuity,
+          zebra: energySystem.energyWeights.zebraPatterns,
+        },
+        combinedBox
+      );
+
+      const newEnergy = energySystem.geometricKernels.calculateGeometricEnergy(
+        tempGrid,
+        states,
+        {
+          corners: energySystem.energyWeights.sharpCorners,
+          continuity: energySystem.energyWeights.geometricContinuity,
+          zebra: energySystem.energyWeights.zebraPatterns,
+        },
+        combinedBox
+      );
+
+      deltaEnergy = newEnergy - oldEnergy;
+    } else {
+      // Non-overlapping case: calculate two separate energy differences
+      deltaEnergy = this.calculateSeparateEnergyDifferences(
+        grid, energySystem, cell1, cell2, state1, state2, states, box1, box2
+      );
+    }
+
+    return deltaEnergy;
+  }
+
+  // Check if two bounding boxes overlap
+  boundingBoxesOverlap(box1, box2) {
+    return !(box1.maxRow < box2.minRow || box2.maxRow < box1.minRow ||
+             box1.maxCol < box2.minCol || box2.maxCol < box1.minCol);
+  }
+
+  // Combine two overlapping bounding boxes into one
+  combineBoundingBoxes(box1, box2) {
+    return {
+      minRow: Math.min(box1.minRow, box2.minRow),
+      maxRow: Math.max(box1.maxRow, box2.maxRow),
+      minCol: Math.min(box1.minCol, box2.minCol),
+      maxCol: Math.max(box1.maxCol, box2.maxCol),
+    };
+  }
+
+  // Calculate energy differences for non-overlapping bounding boxes
+  calculateSeparateEnergyDifferences(
+    grid, energySystem, cell1, cell2, state1, state2, states, box1, box2
+  ) {
+    // Create temporary grid with the swap applied
     const tempGrid = grid.map((r) => [...r]);
     tempGrid[cell1.row][cell1.col] = state2;
     tempGrid[cell2.row][cell2.col] = state1;
 
-    // Calculate energy using optimized region-based approach with bounding boxes
-    const oldEnergy = energySystem.geometricKernels.calculateGeometricEnergy(
-      grid,
-      states,
-      {
-        corners: energySystem.energyWeights.sharpCorners,
-        continuity: energySystem.energyWeights.geometricContinuity,
-        zebra: energySystem.energyWeights.zebraPatterns,
-      },
-      boundingBox
+    const energyWeights = {
+      corners: energySystem.energyWeights.sharpCorners,
+      continuity: energySystem.energyWeights.geometricContinuity,
+      zebra: energySystem.energyWeights.zebraPatterns,
+    };
+
+    // Calculate energy difference for box1 (only cell1 affects this box)
+    const oldEnergy1 = energySystem.geometricKernels.calculateGeometricEnergy(
+      grid, states, energyWeights, box1
+    );
+    const newEnergy1 = energySystem.geometricKernels.calculateGeometricEnergy(
+      tempGrid, states, energyWeights, box1
     );
 
-    const newEnergy = energySystem.geometricKernels.calculateGeometricEnergy(
-      tempGrid,
-      states,
-      {
-        corners: energySystem.energyWeights.sharpCorners,
-        continuity: energySystem.energyWeights.geometricContinuity,
-        zebra: energySystem.energyWeights.zebraPatterns,
-      },
-      boundingBox
+    // Calculate energy difference for box2 (only cell2 affects this box)
+    const oldEnergy2 = energySystem.geometricKernels.calculateGeometricEnergy(
+      grid, states, energyWeights, box2
+    );
+    const newEnergy2 = energySystem.geometricKernels.calculateGeometricEnergy(
+      tempGrid, states, energyWeights, box2
     );
 
-    return newEnergy - oldEnergy;
+    // Total energy difference is the sum of both regions
+    return (newEnergy1 - oldEnergy1) + (newEnergy2 - oldEnergy2);
   }
 
   // Temperature cooling schedule

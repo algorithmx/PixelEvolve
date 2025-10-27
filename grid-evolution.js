@@ -13,10 +13,13 @@ export class GridEvolution {
     this.canvasId = canvasId;
     this.config = config;
     this.isInitialized = false;
-    this.debugMode = config.debugMode || true;
+
+    // Debug levels: 0=off, 1=essential, 2=important, 3=detailed, 4=verbose
+    this.debugLevel = config.debugLevel !== undefined ? config.debugLevel : 2;
+    this.debugMode = this.debugLevel > 0;
 
     // Log initialization attempt
-    this.log("GridEvolution constructor called with canvas ID:", canvasId);
+    this.logVerbose("GridEvolution constructor called with canvas ID:", canvasId);
 
     // Initialize sub-systems
     this.initializeWithFallback();
@@ -26,17 +29,17 @@ export class GridEvolution {
     try {
       // Method 1: Direct initialization
       if (this.tryInitializeDirect()) {
-        this.log("Direct initialization successful");
+        this.logImportant("Direct initialization successful");
         this.isInitialized = true;
         this.completeInitialization();
         return;
       }
 
       // Method 2: Wait for DOM ready
-      this.log("Direct initialization failed, waiting for DOM...");
+      this.logDetailed("Direct initialization failed, waiting for DOM...");
       this.waitForDOM(() => {
         if (this.tryInitializeDirect()) {
-          this.log("DOM-ready initialization successful");
+          this.logImportant("DOM-ready initialization successful");
           this.isInitialized = true;
           this.completeInitialization();
         } else {
@@ -61,11 +64,11 @@ export class GridEvolution {
       // Find canvas element
       const canvas = document.getElementById(this.canvasId);
       if (!canvas) {
-        this.log("Canvas element not found:", this.canvasId);
+        this.logDetailed("Canvas element not found:", this.canvasId);
         return false;
       }
 
-      this.log("Canvas element found:", canvas);
+      this.logVerbose("Canvas element found:", canvas);
 
       // Initialize core components
       this.initializeComponents(canvas);
@@ -99,18 +102,24 @@ export class GridEvolution {
       debugMode: this.debugMode,
     });
 
-    // Initialize evolution engine
-    this.evolutionEngine = new EvolutionEngine(this.gridCore.gridSize, {
-      ...this.config,
-      debugMode: this.debugMode,
-    });
-
-    // Initialize UI controller
+    // Initialize UI controller first to get UI values
     this.uiController = new UIController({
       debugMode: this.debugMode,
     });
 
-    this.log("All components initialized successfully");
+    // Get UI values to use as single source of truth
+    const uiValues = this.uiController.getUIValues();
+
+    // Initialize evolution engine with UI temperature as single source of truth
+    this.evolutionEngine = new EvolutionEngine(this.gridCore.gridSize, {
+      ...this.config,
+      temperature: uiValues.temperature,
+      coolingRate: uiValues.coolingRate,
+      maxSteps: uiValues.maxSteps,
+      debugMode: this.debugMode,
+    });
+
+    this.logImportant("All components initialized with UI temperature:", uiValues.temperature);
   }
 
   setupEventHandlers() {
@@ -144,7 +153,7 @@ export class GridEvolution {
     // Update UI with current values
     this.updateUIFromConfig();
 
-    this.log("Event handlers set up successfully");
+    this.logDetailed("Event handlers set up successfully");
   }
 
   calculateInitialState() {
@@ -154,13 +163,13 @@ export class GridEvolution {
       this.gridCore.STATES,
     );
 
-    // Initialize simulated annealing
+    // Initialize simulated annealing with UI temperature as single source of truth
+    const uiValues = this.uiController.getUIValues();
     this.evolutionEngine.initializeSimulatedAnnealing(
       this.energySystem,
       this.gridCore.grid,
-      this.gridCore.totalArea,
-      this.gridCore.targetArea,
       this.gridCore.STATES,
+      uiValues.temperature,
     );
     this.evolutionEngine.currentEnergy = initialEnergy;
     this.evolutionEngine.currentCost = initialEnergy;
@@ -168,15 +177,15 @@ export class GridEvolution {
     // Initialize cost history
     this.evolutionEngine.costHistory = [initialEnergy];
 
-    this.log(
-      "Initial state calculated with enhanced energy system - Energy:",
+    this.logImportant(
+      "Initial state calculated - Energy:",
       initialEnergy.toFixed(3),
     );
   }
 
   completeInitialization() {
     try {
-      this.log("Completing initialization...");
+      this.logDetailed("Completing initialization...");
 
       // Force initial render
       this.render();
@@ -192,8 +201,8 @@ export class GridEvolution {
       // Hide loading indicator
       this.uiController.hideLoadingIndicator();
 
-      this.log("Initialization completed successfully!", "success");
-      this.log(
+      this.logImportant("Initialization completed!");
+      this.logImportant(
         "Initial state - Area:",
         this.gridCore.totalArea.toFixed(1),
         "Target:",
@@ -221,7 +230,7 @@ export class GridEvolution {
 
   toggleCell(row, col) {
     const change = this.gridCore.toggleCell(row, col);
-    this.log("Cell toggled:", change);
+    this.logVerbose("Cell toggled:", change);
     return change;
   }
 
@@ -229,7 +238,7 @@ export class GridEvolution {
 
   // Evolution control methods
   startEvolution() {
-    this.log("startEvolution() called");
+    this.logImportant("Starting evolution");
 
     // Reset evolution state if starting fresh
     if (SimulationStatus.isStopped() || SimulationStatus.isIdle()) {
@@ -243,13 +252,13 @@ export class GridEvolution {
   }
 
   pauseEvolution() {
-    this.log("pauseEvolution() called");
+    this.logImportant("Evolution paused");
     SimulationStatus.setStatus(SimulationStatus.STATUS.PAUSED);
     this.evolutionEngine.stopEvolution();
   }
 
   resumeEvolution() {
-    this.log("resumeEvolution() called");
+    this.logImportant("Evolution resumed");
 
     if (SimulationStatus.isPaused()) {
       SimulationStatus.setStatus(SimulationStatus.STATUS.RUNNING);
@@ -261,19 +270,12 @@ export class GridEvolution {
   }
 
   stopEvolution() {
-    this.log("stopEvolution() called");
+    this.logImportant("Evolution stopped");
     SimulationStatus.setStatus(SimulationStatus.STATUS.STOPPED);
     this.evolutionEngine.stopEvolution();
   }
 
   evolveLoop() {
-    this.log(
-      "evolveLoop() called, isRunning:",
-      this.evolutionEngine.isRunning,
-      "status:",
-      SimulationStatus.getStatus(),
-    );
-
     // Continue only if engine is running AND status is RUNNING
     if (this.evolutionEngine.isRunning && SimulationStatus.isRunning()) {
       this.evolveStep();
@@ -287,7 +289,6 @@ export class GridEvolution {
   }
 
   evolveStep() {
-    this.log("evolveStep() called, isRunning:", this.evolutionEngine.isRunning);
     if (!this.evolutionEngine.isRunning) return;
 
     let shouldRender = false;
@@ -333,7 +334,7 @@ export class GridEvolution {
 
   // Grid management methods
   reset() {
-    this.log("reset() called");
+    this.logImportant("Grid reset");
     this.stopEvolution();
     this.evolutionEngine.reset();
     this.gridCore.reset();
@@ -344,7 +345,7 @@ export class GridEvolution {
   }
 
   randomize() {
-    this.log("randomize() called");
+    this.logImportant("Grid randomized");
     this.stopEvolution();
     this.evolutionEngine.reset();
     this.gridCore.randomize();
@@ -355,7 +356,7 @@ export class GridEvolution {
   }
 
   resizeGrid(newSize) {
-    this.log("resizeGrid called with:", newSize);
+    this.logImportant(`Grid resized to ${newSize}x${newSize}`);
     this.stopEvolution();
     this.evolutionEngine.reset();
 
@@ -504,7 +505,7 @@ export class GridEvolution {
   // Rendering and UI methods
   render() {
     if (!this.isInitialized) {
-      this.log("render() called but not initialized");
+      this.logVerbose("render() called but not initialized");
       return;
     }
 
@@ -608,7 +609,7 @@ export class GridEvolution {
       this.renderer,
       this.gridCore,
       (row, col, height, width) => {
-        this.log(
+        this.logDetailed(
           `Rectangle drawn: start(${row},${col}) size(${height}x${width})`,
         );
 
@@ -629,13 +630,15 @@ export class GridEvolution {
   destroy() {
     this.stopEvolution();
 
-    this.log("GridEvolution destroyed");
+    this.logImportant("GridEvolution destroyed");
   }
 
-  // Logging methods
-  log(...args) {
-    if (this.debugMode) {
-      console.log("[GridEvolution]", ...args);
+  // Logging methods with levels
+  log(level, ...args) {
+    if (this.debugLevel >= level) {
+      const levelNames = ['', 'ESSENTIAL', 'IMPORTANT', 'DETAILED', 'VERBOSE'];
+      const prefix = levelNames[level] || 'INFO';
+      console.log(`[GridEvolution ${prefix}]`, ...args);
     }
   }
 
@@ -646,4 +649,10 @@ export class GridEvolution {
   logWarning(...args) {
     console.warn("[GridEvolution WARNING]", ...args);
   }
+
+  // Convenience methods for different levels
+  logEssential(...args) { this.log(1, ...args); }
+  logImportant(...args) { this.log(2, ...args); }
+  logDetailed(...args) { this.log(3, ...args); }
+  logVerbose(...args) { this.log(4, ...args); }
 }

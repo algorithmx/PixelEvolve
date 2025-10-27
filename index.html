@@ -336,7 +336,7 @@
                                         id="temperature-slider"
                                         min="0.001"
                                         max="5"
-                                        value="1"
+                                        value="1.000"
                                         step="0.001"
                                         class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                                     />
@@ -586,11 +586,15 @@
                 resetTempBtn.addEventListener("click", () => {
                     if (gridEvolution) {
                         gridEvolution.resetTemperature();
-                        document.getElementById("temperature-slider").value =
-                            1.0;
-                        document.getElementById(
-                            "temperature-value",
-                        ).textContent = "1.000";
+                        // Reset to the UI slider's current value, not hardcoded 1.0
+                        const slider = document.getElementById("temperature-slider");
+                        const valueDisplay = document.getElementById("temperature-value");
+                        if (slider && valueDisplay) {
+                            // Get the actual initial temperature from the evolution engine
+                            const initialTemp = gridEvolution.getTemperature();
+                            slider.value = initialTemp;
+                            valueDisplay.textContent = initialTemp.toFixed(3);
+                        }
                     }
                 });
                 document

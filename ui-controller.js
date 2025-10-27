@@ -182,9 +182,24 @@ export class UIController {
 
     // Update temperature display
     updateTemperatureDisplay(temperature) {
-        const element = this.getElement(this.selectors.temperatureValue);
-        if (element) {
-            element.textContent = temperature.toFixed(3);
+        const valueElement = this.getElement(this.selectors.temperatureValue);
+        if (valueElement) {
+            valueElement.textContent = temperature.toFixed(3);
+        }
+
+        // Update temperature slider position to reflect actual temperature
+        const sliderElement = this.getElement(this.selectors.temperatureSlider);
+        if (sliderElement) {
+            // Store user interaction state to avoid interfering with manual changes
+            const isUserChanging = sliderElement.dataset.userChanging === 'true';
+
+            if (!isUserChanging) {
+                // Ensure temperature is within slider bounds
+                const min = parseFloat(sliderElement.min) || 0.001;
+                const max = parseFloat(sliderElement.max) || 5;
+                const clampedTemperature = Math.max(min, Math.min(max, temperature));
+                sliderElement.value = clampedTemperature;
+            }
         }
     }
 
@@ -298,6 +313,22 @@ export class UIController {
         // Temperature control
         const temperatureSlider = this.getElement(this.selectors.temperatureSlider);
         if (temperatureSlider && handlers.onTemperatureChange) {
+            temperatureSlider.addEventListener('mousedown', () => {
+                temperatureSlider.dataset.userChanging = 'true';
+            });
+
+            temperatureSlider.addEventListener('mouseup', () => {
+                temperatureSlider.dataset.userChanging = 'false';
+            });
+
+            temperatureSlider.addEventListener('touchstart', () => {
+                temperatureSlider.dataset.userChanging = 'true';
+            });
+
+            temperatureSlider.addEventListener('touchend', () => {
+                temperatureSlider.dataset.userChanging = 'false';
+            });
+
             temperatureSlider.addEventListener('input', (e) => {
                 const value = parseFloat(e.target.value);
                 handlers.onTemperatureChange(value);

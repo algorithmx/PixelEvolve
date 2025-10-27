@@ -164,7 +164,6 @@ export class GeometricKernels {
     };
   }
 
-  
   // ============================================================================
   // ZEBRA PATTERN KERNELS
   // ============================================================================
@@ -241,14 +240,48 @@ export class GeometricKernels {
   // ============================================================================
 
   /**
+   * Private method to perform the core convolution calculation
+   * @param {Array<Array<number>>} grid - Input grid
+   * @param {Array<Array<number>>} kernel - Convolution kernel
+   * @param {number} kCenterRow - Kernel center row
+   * @param {number} kCenterCol - Kernel center column
+   * @param {number} row - Grid row to calculate convolution for
+   * @param {number} col - Grid column to calculate convolution for
+   * @returns {number} - Convolution response
+   */
+  #calculateConvolutionResponse(
+    grid,
+    kernel,
+    kCenterRow,
+    kCenterCol,
+    row,
+    col,
+  ) {
+    const kHeight = kernel.length;
+    const kWidth = kernel[0].length;
+    let response = 0;
+    for (let kr = 0; kr < kHeight; kr++) {
+      for (let kc = 0; kc < kWidth; kc++) {
+        const gr = row + kr - kCenterRow;
+        const gc = col + kc - kCenterCol;
+
+        if (gr >= 0 && gr < this.gridSize && gc >= 0 && gc < this.gridSize) {
+          const gridValue = this.getCellGridValue(grid[gr][gc]);
+          response += gridValue * kernel[kr][kc];
+        }
+      }
+    }
+    return response;
+  }
+
+  /**
    * Apply a kernel to a grid with proper boundary handling
    * @param {Array<Array<number>>} grid - Input grid
    * @param {Object} kernelInfo - Kernel object with kernel array and description
-   * @param {boolean} normalize - Whether to normalize the result
    * @param {Object} boundingBox - Optional bounding box {minRow, maxRow, minCol, maxCol}
    * @returns {Array<Array<number>>} - Convolution result
    */
-  applyKernel(grid, kernelInfo, normalize = true, boundingBox = null) {
+  applyKernel(grid, kernelInfo, boundingBox = null, useAbs = false) {
     const kernel = kernelInfo.kernel;
     const kHeight = kernel.length;
     const kWidth = kernel[0].length;
@@ -259,37 +292,25 @@ export class GeometricKernels {
       .fill(null)
       .map(() => Array(this.gridSize).fill(0));
 
-    const { minRow = 0, maxRow = this.gridSize - 1, minCol = 0, maxCol = this.gridSize - 1 } = boundingBox || {};
+    const {
+      minRow = 0,
+      maxRow = this.gridSize - 1,
+      minCol = 0,
+      maxCol = this.gridSize - 1,
+    } = boundingBox || {};
 
     for (let row = minRow; row <= maxRow; row++) {
       for (let col = minCol; col <= maxCol; col++) {
-        let response = 0;
-        let validCells = 0;
-
-        for (let kr = 0; kr < kHeight; kr++) {
-          for (let kc = 0; kc < kWidth; kc++) {
-            const gr = row + kr - kCenterRow;
-            const gc = col + kc - kCenterCol;
-
-            if (
-              gr >= 0 &&
-              gr < this.gridSize &&
-              gc >= 0 &&
-              gc < this.gridSize
-            ) {
-              const gridValue = this.getCellGridValue(grid[gr][gc]);
-              response += gridValue * kernel[kr][kc];
-              validCells++;
-            }
-          }
-        }
-
-        // Normalize if requested
-        if (normalize && validCells > 0) {
-          result[row][col] = response / Math.sqrt(validCells);
-        } else {
-          result[row][col] = response;
-        }
+        // reuse the convolution calculation
+        const response = this.#calculateConvolutionResponse(
+          grid,
+          kernel,
+          kCenterRow,
+          kCenterCol,
+          row,
+          col,
+        );
+        result[row][col] = useAbs ? Math.abs(response) : response;
       }
     }
 
@@ -302,59 +323,16 @@ export class GeometricKernels {
    * regardless of whether they produce positive or negative convolution responses
    * @param {Array<Array<number>>} grid - Input grid
    * @param {Object} kernelInfo - Kernel object with kernel array and description
-   * @param {boolean} normalize - Whether to normalize the result
    * @param {Object} boundingBox - Optional bounding box {minRow, maxRow, minCol, maxCol}
    * @returns {Array<Array<number>>} - Convolution result with absolute values
    */
-  applyKernelAbs(grid, kernelInfo, normalize = true, boundingBox = null) {
-    const kernel = kernelInfo.kernel;
-    const kHeight = kernel.length;
-    const kWidth = kernel[0].length;
-    const kCenterRow = Math.floor(kHeight / 2);
-    const kCenterCol = Math.floor(kWidth / 2);
-
-    const result = Array(this.gridSize)
-      .fill(null)
-      .map(() => Array(this.gridSize).fill(0));
-
-    const { minRow = 0, maxRow = this.gridSize - 1, minCol = 0, maxCol = this.gridSize - 1 } = boundingBox || {};
-
-    for (let row = minRow; row <= maxRow; row++) {
-      for (let col = minCol; col <= maxCol; col++) {
-        let response = 0;
-        let validCells = 0;
-
-        for (let kr = 0; kr < kHeight; kr++) {
-          for (let kc = 0; kc < kWidth; kc++) {
-            const gr = row + kr - kCenterRow;
-            const gc = col + kc - kCenterCol;
-
-            if (
-              gr >= 0 &&
-              gr < this.gridSize &&
-              gc >= 0 &&
-              gc < this.gridSize
-            ) {
-              const gridValue = this.getCellGridValue(grid[gr][gc]);
-              response += gridValue * kernel[kr][kc];
-              validCells++;
-            }
-          }
-        }
-
-        // Take absolute value for pattern detection
-        response = Math.abs(response);
-
-        // Normalize if requested
-        if (normalize && validCells > 0) {
-          result[row][col] = response / Math.sqrt(validCells);
-        } else {
-          result[row][col] = response;
-        }
-      }
-    }
-
-    return result;
+  applyKernelAbs(grid, kernelInfo, boundingBox = null) {
+    return this.applyKernel(
+      grid,
+      kernelInfo,
+      (boundingBox = boundingBox),
+      (useAbs = true),
+    );
   }
 
   /**
@@ -369,14 +347,14 @@ export class GeometricKernels {
         return 0; // EMPTY
       case 1:
         return 1; // FULL
-      case 2:
-        return 0.75; // HALF_DIAG_TL_BR
-      case 3:
-        return 0.75; // HALF_DIAG_TR_BL
-      case 4:
-        return 0.75; // HALF_DIAG_BL_TR
-      case 5:
-        return 0.75; // HALF_DIAG_BR_TL
+      // case 2:
+      //   return 0.75; // HALF_DIAG_TL_BR
+      // case 3:
+      //   return 0.75; // HALF_DIAG_TR_BL
+      // case 4:
+      //   return 0.75; // HALF_DIAG_BL_TR
+      // case 5:
+      //   return 0.75; // HALF_DIAG_BR_TL
       default:
         return 0;
     }
@@ -421,7 +399,12 @@ export class GeometricKernels {
     const generalCorners = (() => {
       const kernel = this.cornerKernels.cornerDetector;
       const convResult = this.applyKernel(grid, kernel, true, boundingBox);
-      return this.analyzeConvolutionResult(convResult, 1.0, "General corners", boundingBox);
+      return this.analyzeConvolutionResult(
+        convResult,
+        1.0,
+        "General corners",
+        boundingBox,
+      );
     })();
 
     const results = { lCorners, diagonalConflicts, generalCorners };
@@ -526,7 +509,6 @@ export class GeometricKernels {
     return results;
   }
 
-  
   // ============================================================================
   // ZEBRA PATTERN DETECTION METHODS
   // ============================================================================
@@ -543,7 +525,12 @@ export class GeometricKernels {
       .fill(null)
       .map(() => Array(this.gridSize).fill(0));
 
-    const { minRow = 0, maxRow = this.gridSize - 1, minCol = 0, maxCol = this.gridSize - 1 } = boundingBox || {};
+    const {
+      minRow = 0,
+      maxRow = this.gridSize - 1,
+      minCol = 0,
+      maxCol = this.gridSize - 1,
+    } = boundingBox || {};
 
     for (let row = minRow; row <= maxRow; row++) {
       for (let col = minCol; col <= maxCol; col++) {
@@ -683,7 +670,13 @@ export class GeometricKernels {
    * @param {Object} boundingBox - Optional bounding box {minRow, maxRow, minCol, maxCol}
    * @returns {Object} - Aggregated results
    */
-  aggregateKernelResults(grid, kernels, threshold, description, boundingBox = null) {
+  aggregateKernelResults(
+    grid,
+    kernels,
+    threshold,
+    description,
+    boundingBox = null,
+  ) {
     let totalScore = 0;
     let totalCount = 0;
     let maxConvResult = Array(this.gridSize)
@@ -694,7 +687,12 @@ export class GeometricKernels {
       const convResult = this.applyKernel(grid, kernelInfo, true, boundingBox);
 
       // Keep track of maximum response across all kernels
-      const { minRow = 0, maxRow = this.gridSize - 1, minCol = 0, maxCol = this.gridSize - 1 } = boundingBox || {};
+      const {
+        minRow = 0,
+        maxRow = this.gridSize - 1,
+        minCol = 0,
+        maxCol = this.gridSize - 1,
+      } = boundingBox || {};
 
       for (let row = minRow; row <= maxRow; row++) {
         for (let col = minCol; col <= maxCol; col++) {
@@ -707,7 +705,12 @@ export class GeometricKernels {
     }
 
     // Count significant responses
-    const { minRow = 0, maxRow = this.gridSize - 1, minCol = 0, maxCol = this.gridSize - 1 } = boundingBox || {};
+    const {
+      minRow = 0,
+      maxRow = this.gridSize - 1,
+      minCol = 0,
+      maxCol = this.gridSize - 1,
+    } = boundingBox || {};
 
     for (let row = minRow; row <= maxRow; row++) {
       for (let col = minCol; col <= maxCol; col++) {
@@ -735,11 +738,21 @@ export class GeometricKernels {
    * @param {Object} boundingBox - Optional bounding box {minRow, maxRow, minCol, maxCol}
    * @returns {Object} - Analysis results
    */
-  analyzeConvolutionResult(convResult, threshold, description, boundingBox = null) {
+  analyzeConvolutionResult(
+    convResult,
+    threshold,
+    description,
+    boundingBox = null,
+  ) {
     let score = 0;
     let count = 0;
 
-    const { minRow = 0, maxRow = this.gridSize - 1, minCol = 0, maxCol = this.gridSize - 1 } = boundingBox || {};
+    const {
+      minRow = 0,
+      maxRow = this.gridSize - 1,
+      minCol = 0,
+      maxCol = this.gridSize - 1,
+    } = boundingBox || {};
 
     for (let row = minRow; row <= maxRow; row++) {
       for (let col = minCol; col <= maxCol; col++) {
@@ -784,20 +797,19 @@ export class GeometricKernels {
 
     const finalWeights = { ...defaultWeights, ...weights };
 
-    const cornerResults = this.detectCorners(grid, states, boundingBox);
-    const continuityResults = this.detectContinuityIssues(grid, states, boundingBox);
+    // const cornerResults = this.detectCorners(grid, states, boundingBox);
+    const continuityResults = this.detectContinuityIssues(
+      grid,
+      states,
+      boundingBox,
+    );
     const zebraResults = this.detectZebraPatterns(grid, states, boundingBox);
 
     let totalEnergy = 0;
 
-    totalEnergy += cornerResults.total.score * finalWeights.corners;
+    // totalEnergy += cornerResults.total.score * finalWeights.corners;
     totalEnergy += continuityResults.total.score * finalWeights.continuity;
     totalEnergy += zebraResults.total.score * finalWeights.zebra;
-
-    // Normalize by the area of the bounding box (or full grid if no bounding box)
-    const { minRow = 0, maxRow = this.gridSize - 1, minCol = 0, maxCol = this.gridSize - 1 } = boundingBox || {};
-    const area = (maxRow - minRow + 1) * (maxCol - minCol + 1);
-    totalEnergy = totalEnergy / area;
 
     return totalEnergy;
   }
