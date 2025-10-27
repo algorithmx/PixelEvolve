@@ -15,6 +15,10 @@ export class GridCore {
             HALF_DIAG_BR_TL: 5   // Bottom-right to top-left
         };
 
+        // Precomputed state inventories for efficient sampling
+        this.stateInventories = null;
+        this.inventoryValid = false;
+
         // Initialize grid
         this.initializeGrid();
     }
@@ -26,6 +30,9 @@ export class GridCore {
         this.totalArea = 0;
         this.targetArea = Math.floor(this.gridSize * this.gridSize * 0.3); // 30% target
 
+        // Invalidate state inventories - will be computed on demand
+        this.inventoryValid = false;
+
         // Create initial pattern for immediate visualization
         this.createInitialPattern();
 
@@ -36,11 +43,65 @@ export class GridCore {
         };
     }
 
+    // Compute state inventories (O(n²) operation, cached until invalidated)
+    computeStateInventories() {
+        if (this.inventoryValid && this.stateInventories) {
+            return this.stateInventories;
+        }
+
+        // Initialize inventories for all possible states (0-5)
+        this.stateInventories = {};
+        for (let state = 0; state <= 5; state++) {
+            this.stateInventories[state] = {
+                count: 0
+            };
+        }
+
+        // Scan grid once to count all states
+        for (let row = 0; row < this.gridSize; row++) {
+            for (let col = 0; col < this.gridSize; col++) {
+                const state = this.grid[row][col];
+                this.stateInventories[state].count++;
+            }
+        }
+
+        this.inventoryValid = true;
+        return this.stateInventories;
+    }
+
+    // Incrementally update state inventories when a single cell changes (O(1) operation)
+    updateStateInventories(oldState, newState) {
+        if (!this.inventoryValid || !this.stateInventories) {
+            // If inventories not valid, recompute from scratch
+            this.computeStateInventories();
+            return;
+        }
+
+        // Decrement count for old state
+        if (this.stateInventories[oldState]) {
+            this.stateInventories[oldState].count--;
+        }
+
+        // Increment count for new state
+        if (this.stateInventories[newState]) {
+            this.stateInventories[newState].count++;
+        }
+    }
+
+    // Invalidate state inventories when grid changes in bulk
+    invalidateStateInventories() {
+        this.inventoryValid = false;
+        this.stateInventories = null;
+    }
+
     createInitialPattern() {
         // Create a central blob pattern as starting point
         const centerRow = Math.floor(this.gridSize / 2);
         const centerCol = Math.floor(this.gridSize / 2);
         const blobRadius = Math.max(2, Math.floor(this.gridSize / 8));
+
+        // Invalidate inventories since we're doing bulk changes
+        this.invalidateStateInventories();
 
         for (let row = centerRow - blobRadius; row <= centerRow + blobRadius; row++) {
             for (let col = centerCol - blobRadius; col <= centerCol + blobRadius; col++) {
@@ -52,16 +113,22 @@ export class GridCore {
                             this.grid[row][col] = this.STATES.FULL;
                             this.totalArea += 1;
                         } else {
-                            // Random diagonal state for edge variation
-                            const diagonalStates = [
-                                this.STATES.HALF_DIAG_TL_BR,
-                                this.STATES.HALF_DIAG_TR_BL,
-                                this.STATES.HALF_DIAG_BL_TR,
-                                this.STATES.HALF_DIAG_BR_TL
-                            ];
-                            const randomState = diagonalStates[Math.floor(Math.random() * diagonalStates.length)];
-                            this.grid[row][col] = randomState;
-                            this.totalArea += 0.5;
+                            // CURRENT CODE (comment out):
+                            // // Random diagonal state for edge variation
+                            // const diagonalStates = [
+                            //     this.STATES.HALF_DIAG_TL_BR,
+                            //     this.STATES.HALF_DIAG_TR_BL,
+                            //     this.STATES.HALF_DIAG_BL_TR,
+                            //     this.STATES.HALF_DIAG_BR_TL
+                            // ];
+                            // const randomState = diagonalStates[Math.floor(Math.random() * diagonalStates.length)];
+                            // this.grid[row][col] = randomState;
+                            // this.totalArea += 0.5;
+
+                            // DESIRED CODE:
+                            // Use only FULL states for edges instead of diagonal states
+                            this.grid[row][col] = this.STATES.FULL;
+                            this.totalArea += 1;
                         }
                     }
                 }
@@ -74,8 +141,14 @@ export class GridCore {
             const col = Math.floor(Math.random() * this.gridSize);
 
             if (this.grid[row][col] === this.STATES.EMPTY) {
-                const state = Math.random() < 0.7 ? this.STATES.FULL :
-                              (Math.floor(Math.random() * 4) + 2); // 70% full, 30% diagonal
+                // CURRENT CODE (comment out):
+                // const state = Math.random() < 0.7 ? this.STATES.FULL :
+                //               (Math.floor(Math.random() * 4) + 2); // 70% full, 30% diagonal
+
+                // DESIRED CODE:
+                // Use only FULL states instead of allowing diagonal states
+                const state = this.STATES.FULL; // 100% full states
+
                 this.grid[row][col] = state;
                 this.totalArea += this.getAreaContribution(state);
             }
@@ -118,14 +191,24 @@ export class GridCore {
 
     toggleCell(row, col) {
         const currentState = this.grid[row][col];
-        const nextState = (currentState + 1) % 6;
+
+        // CURRENT CODE (comment out):
+        // const nextState = (currentState + 1) % 6;  // Cycles through all 6 states
+
+        // DESIRED CODE:
+        // Toggle only between EMPTY (0) and FULL (1) states
+        const nextState = currentState === this.STATES.EMPTY ? this.STATES.FULL : this.STATES.EMPTY;
 
         // Update area count
         const oldContribution = this.getAreaContribution(currentState);
         const newContribution = this.getAreaContribution(nextState);
         this.totalArea += newContribution - oldContribution;
 
+        // Update grid
         this.grid[row][col] = nextState;
+
+        // Update state inventories incrementally
+        this.updateStateInventories(currentState, nextState);
 
         return {
             oldState: currentState,
@@ -145,8 +228,12 @@ export class GridCore {
         const oldContribution = this.getAreaContribution(oldState);
         const newContribution = this.getAreaContribution(newState);
 
+        // Update grid
         this.grid[row][col] = newState;
         this.totalArea += newContribution - oldContribution;
+
+        // Update state inventories incrementally
+        this.updateStateInventories(oldState, newState);
 
         return {
             oldState: oldState,
@@ -162,11 +249,20 @@ export class GridCore {
         );
         this.totalArea = 0;
 
+        // Invalidate inventories since we're doing bulk changes
+        this.invalidateStateInventories();
+
         // Create random initial configuration
         for (let row = 0; row < this.gridSize; row++) {
             for (let col = 0; col < this.gridSize; col++) {
                 if (Math.random() < 0.3) { // 30% chance of being occupied
-                    const state = Math.floor(Math.random() * 6);
+                    // CURRENT CODE (comment out):
+                    // const state = Math.floor(Math.random() * 6); // Can be 0-5
+
+                    // DESIRED CODE:
+                    // Restrict to only EMPTY (0) and FULL (1) states
+                    const state = this.STATES.FULL; // Always use FULL when occupied
+
                     this.grid[row][col] = state;
                     this.totalArea += this.getAreaContribution(state);
                 }

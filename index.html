@@ -1,608 +1,785 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grid Evolution Simulator - Robust Version</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .mono { font-family: 'JetBrains Mono', monospace; }
-        .control-panel { background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); }
-        .grid-container { background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%); }
-        .status-bar { background: linear-gradient(90deg, #2563eb 0%, #06b6d4 100%); }
-        .hover-glow:hover { box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
-        .transition-all { transition: all 0.3s ease; }
-        .loading { opacity: 0.5; pointer-events: none; }
-        .error-message { background: #fee2e2; border: 1px solid #ef4444; color: #dc2626; padding: 20px; border-radius: 8px; margin: 20px; }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Grid Evolution Simulator - Robust Version</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                font-family: "Inter", sans-serif;
+            }
+            .mono {
+                font-family: "JetBrains Mono", monospace;
+            }
+            .control-panel {
+                background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            }
+            .grid-container {
+                background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+            }
+            .status-bar {
+                background: linear-gradient(90deg, #2563eb 0%, #06b6d4 100%);
+            }
+            .hover-glow:hover {
+                box-shadow: 0 0 20px rgba(37, 99, 235, 0.3);
+            }
+            .transition-all {
+                transition: all 0.3s ease;
+            }
+            .loading {
+                opacity: 0.5;
+                pointer-events: none;
+            }
+            .error-message {
+                background: #fee2e2;
+                border: 1px solid #ef4444;
+                color: #dc2626;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px;
+            }
 
-        /* Modal styles */
-        .modal-backdrop { backdrop-filter: blur(4px); }
-        .modal-content { transform: scale(0.95); opacity: 0; transition: all 0.3s ease; }
-        #kernel-modal:not(.hidden) .modal-content { transform: scale(1); opacity: 1; }
-        .kernel-visualization { transition: transform 0.2s ease; }
-        .kernel-visualization:hover { transform: translateY(-2px); }
-        .template-card { transition: all 0.2s ease; }
-        .template-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    </style>
-</head>
-<body class="bg-gray-50 min-h-screen">
-    <!-- Loading Indicator -->
-    <div id="loading-indicator" class="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg z-50">
-        Initializing...
-    </div>
+            /* Modal styles */
+            .modal-backdrop {
+                backdrop-filter: blur(4px);
+            }
+            .modal-content {
+                transform: scale(0.95);
+                opacity: 0;
+                transition: all 0.3s ease;
+            }
+            #kernel-modal:not(.hidden) .modal-content {
+                transform: scale(1);
+                opacity: 1;
+            }
+            .kernel-visualization {
+                transition: transform 0.2s ease;
+            }
+            .kernel-visualization:hover {
+                transform: translateY(-2px);
+            }
+            .template-card {
+                transition: all 0.2s ease;
+            }
+            .template-card:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            }
 
-    <!-- Header -->
-    <header class="bg-white shadow-sm border-b border-gray-200">
-        <div class="w-full px-4 py-2">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center">
-                    <h1 class="text-lg font-bold text-gray-900">Grid Evolution</h1>
-                    <span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">v2.0</span>
+            /* Expandable kernel matrix styles */
+            .kernel-matrix-content {
+                transition:
+                    max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    opacity 0.3s ease;
+                opacity: 0;
+            }
+            .kernel-matrix-content.expanded {
+                opacity: 1;
+            }
+            .kernel-visualization .cursor-pointer {
+                user-select: none;
+            }
+            .kernel-visualization .cursor-pointer:hover {
+                background-color: #f3f4f6;
+            }
+            .kernel-visualization .cursor-pointer.expanded {
+                background-color: #e5e7eb;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            .expand-icon {
+                transition: transform 0.2s ease;
+            }
+            .kernel-visualization
+                .cursor-pointer:not(.expanded):hover
+                .expand-icon {
+                transform: translateX(2px);
+            }
+        </style>
+    </head>
+    <body class="bg-gray-50 min-h-screen">
+        <!-- Loading Indicator -->
+        <div
+            id="loading-indicator"
+            class="fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg z-50"
+        >
+            Initializing...
+        </div>
+
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b border-gray-200">
+            <div class="w-full px-4 py-2">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center">
+                        <h1 class="text-lg font-bold text-gray-900">
+                            Grid Evolution
+                        </h1>
+                        <span
+                            class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium"
+                            >v2.0</span
+                        >
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="text-xs text-gray-600">
+                            <span class="font-medium">Step:</span>
+                            <span id="step-counter" class="mono font-bold"
+                                >0</span
+                            >
+                        </div>
+                        <div class="text-xs text-gray-600">
+                            <span class="font-medium cost-label">Cost:</span>
+                            <span id="cost-display" class="mono font-bold"
+                                >0.00</span
+                            >
+                        </div>
+                        <button
+                            id="kernel-modal-btn"
+                            class="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors"
+                            title="View Convolution Kernels"
+                        >
+                            📊 Kernels
+                        </button>
+                    </div>
                 </div>
-                <div class="flex items-center space-x-3">
-                    <div class="text-xs text-gray-600">
-                        <span class="font-medium">Step:</span> <span id="step-counter" class="mono font-bold">0</span>
+            </div>
+        </header>
+
+        <!-- Status Bar -->
+        <div class="status-bar text-white py-1">
+            <div class="w-full px-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-3">
+                        <span class="text-xs font-medium">Status:</span>
+                        <span
+                            id="status-display"
+                            class="px-2 py-1 bg-white bg-opacity-20 rounded text-xs"
+                            >Initializing...</span
+                        >
+                        <span class="text-xs font-medium">Area:</span>
+                        <span id="area-display" class="mono text-xs"
+                            >0 / <span id="target-area">307</span></span
+                        >
                     </div>
-                    <div class="text-xs text-gray-600">
-                        <span class="font-medium cost-label">Cost:</span> <span id="cost-display" class="mono font-bold">0.00</span>
+                    <div class="flex items-center space-x-1">
+                        <div
+                            class="w-2 h-2 bg-green-400 rounded-full animate-pulse"
+                            id="status-indicator"
+                        ></div>
+                        <span class="text-xs">Live</span>
                     </div>
-                    <button id="kernel-modal-btn" class="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors" title="View Convolution Kernels">
-                        📊 Kernels
-                    </button>
                 </div>
             </div>
         </div>
-    </header>
 
-    <!-- Status Bar -->
-    <div class="status-bar text-white py-1">
-        <div class="w-full px-4">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center space-x-3">
-                    <span class="text-xs font-medium">Status:</span>
-                    <span id="status-display" class="px-2 py-1 bg-white bg-opacity-20 rounded text-xs">Initializing...</span>
-                    <span class="text-xs font-medium">Area:</span>
-                    <span id="area-display" class="mono text-xs">0 / <span id="target-area">307</span></span>
+        <!-- Main Content -->
+        <div class="w-full px-2 py-4">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <!-- Grid Visualization -->
+                <div class="lg:col-span-3">
+                    <div class="grid-container rounded-lg shadow-lg p-4">
+                        <!-- Canvas Container -->
+                        <div class="flex justify-center mb-4">
+                            <canvas id="grid-canvas"></canvas>
+                        </div>
+
+                        <!-- Control Buttons -->
+                        <div class="flex justify-center space-x-2 mb-3">
+                            <button
+                                id="reset-btn"
+                                class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-all hover-glow text-sm"
+                            >
+                                Reset
+                            </button>
+                            <button
+                                id="random-btn"
+                                class="px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 transition-all hover-glow text-sm"
+                            >
+                                Random
+                            </button>
+                            <button
+                                id="start-btn"
+                                class="px-4 py-2 bg-green-500 text-white rounded font-medium hover:bg-green-600 transition-all hover-glow text-sm"
+                            >
+                                Start Evolution
+                            </button>
+                            <button
+                                id="pause-btn"
+                                class="px-4 py-2 bg-yellow-500 text-white rounded font-medium hover:bg-yellow-600 transition-all hover-glow text-sm"
+                                disabled
+                            >
+                                Pause
+                            </button>
+                            <button
+                                id="resume-btn"
+                                class="px-4 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 transition-all hover-glow text-sm"
+                                disabled
+                            >
+                                Resume
+                            </button>
+                            <button
+                                id="step-btn"
+                                class="px-4 py-2 bg-blue-500 text-white rounded font-medium hover:bg-blue-600 transition-all hover-glow text-sm"
+                            >
+                                Single Step
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Cost Function Chart -->
+                    <div class="mt-4 bg-white rounded-lg shadow-lg p-4">
+                        <div id="cost-chart" style="height: 250px"></div>
+                    </div>
                 </div>
-                <div class="flex items-center space-x-1">
-                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse" id="status-indicator"></div>
-                    <span class="text-xs">Live</span>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Main Content -->
-    <div class="w-full px-2 py-4">
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            <!-- Grid Visualization -->
-            <div class="lg:col-span-3">
-                <div class="grid-container rounded-lg shadow-lg p-4">
-                    <!-- Canvas Container -->
-                    <div class="flex justify-center mb-4">
-                        <canvas id="grid-canvas"></canvas>
-                    </div>
+                <!-- Control Panel -->
+                <div class="lg:col-span-1">
+                    <div
+                        class="control-panel rounded-lg shadow-lg p-4 sticky top-4"
+                    >
+                        <!-- Drawing Instructions -->
+                        <div class="mb-3">
+                            <label
+                                class="block text-sm font-medium text-gray-700 mb-1"
+                                >Drawing Mode</label
+                            >
+                            <div
+                                class="text-xs text-gray-600 bg-blue-50 p-2 rounded border border-blue-200"
+                            >
+                                <strong>Click:</strong> Toggle single cell<br />
+                                <strong>Drag:</strong> Draw filled rectangles
+                            </div>
+                        </div>
 
-                    <!-- Control Buttons -->
-                    <div class="flex justify-center space-x-2 mb-3">
-                        <button id="reset-btn" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-all hover-glow text-sm">
-                            Reset
-                        </button>
-                        <button id="random-btn" class="px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 transition-all hover-glow text-sm">
-                            Random
-                        </button>
-                        <button id="start-btn" class="px-4 py-2 bg-green-500 text-white rounded font-medium hover:bg-green-600 transition-all hover-glow text-sm">
-                            Start Evolution
-                        </button>
-                        <button id="pause-btn" class="px-4 py-2 bg-yellow-500 text-white rounded font-medium hover:bg-yellow-600 transition-all hover-glow text-sm" disabled>
-                            Pause
-                        </button>
-                        <button id="step-btn" class="px-4 py-2 bg-blue-500 text-white rounded font-medium hover:bg-blue-600 transition-all hover-glow text-sm">
-                            Single Step
-                        </button>
-                    </div>
-                </div>
+                        <!-- Preset Configurations -->
+                        <div class="mb-3">
+                            <label
+                                class="block text-sm font-medium text-gray-700 mb-1"
+                                >Presets</label
+                            >
+                            <select
+                                id="preset-select"
+                                class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            >
+                                <option value="">Select Preset...</option>
+                                <option value="smooth">Smooth Blob</option>
+                                <option value="checkerboard">
+                                    Checkerboard Test
+                                </option>
+                                <option value="random">Random Scatter</option>
+                                <option value="custom">Custom Pattern</option>
+                            </select>
+                        </div>
 
-                <!-- Cost Function Chart -->
-                <div class="mt-4 bg-white rounded-lg shadow-lg p-4">
-                    <div id="cost-chart" style="height: 250px;"></div>
-                </div>
-            </div>
+                        <!-- Grid Size -->
+                        <div class="mb-3">
+                            <label
+                                class="block text-sm font-medium text-gray-700 mb-1"
+                                >Grid Size</label
+                            >
+                            <select
+                                id="grid-size-select"
+                                class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            >
+                                <option value="32" selected>32 × 32</option>
+                                <option value="48">48 × 48</option>
+                                <option value="64">64 × 64</option>
+                            </select>
+                        </div>
 
-            <!-- Control Panel -->
-            <div class="lg:col-span-1">
-                <div class="control-panel rounded-lg shadow-lg p-4 sticky top-4">
-
-                    <!-- Preset Configurations -->
-                    <div class="mb-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Presets</label>
-                        <select id="preset-select" class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            <option value="">Select Preset...</option>
-                            <option value="smooth">Smooth Blob</option>
-                            <option value="checkerboard">Checkerboard Test</option>
-                            <option value="random">Random Scatter</option>
-                            <option value="custom">Custom Pattern</option>
-                        </select>
-                    </div>
-
-                    <!-- Grid Size -->
-                    <div class="mb-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Grid Size</label>
-                        <select id="grid-size-select" class="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            <option value="16">16 × 16</option>
-                            <option value="24">24 × 24</option>
-                            <option value="32" selected>32 × 32</option>
-                            <option value="48">48 × 48</option>
-                            <option value="64">64 × 64</option>
-                        </select>
-                    </div>
-
-                    <!-- Evolution Speed -->
-                    <div class="mb-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">
-                            Speed: <span id="speed-value" class="mono text-xs">2ms</span>
-                        </label>
-                        <input type="range" id="speed-slider" min="2" max="1000" value="2" step="1"
-                               class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                    </div>
-
-                    <!-- Evolution Method -->
-                    <div class="mb-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Method</label>
-                        <div class="space-y-1">
-                            <label class="flex items-center">
-                                <input type="radio" name="evolution-method" value="annealing" checked class="mr-1">
-                                <span class="text-xs">Annealing</span>
+                        <!-- Evolution Speed -->
+                        <div class="mb-3">
+                            <label
+                                class="block text-sm font-medium text-gray-700 mb-1"
+                            >
+                                Speed:
+                                <span id="speed-value" class="mono text-xs"
+                                    >2ms</span
+                                >
                             </label>
-                            <label class="flex items-center">
-                                <input type="radio" name="evolution-method" value="greedy" class="mr-1">
-                                <span class="text-xs">Greedy</span>
+                            <input
+                                type="range"
+                                id="speed-slider"
+                                min="2"
+                                max="1000"
+                                value="2"
+                                step="1"
+                                class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+
+                        <!-- Simulated Annealing Parameters -->
+                        <div id="annealing-controls" class="mb-3">
+                            <h3 class="text-sm font-medium text-gray-700 mb-2">
+                                Annealing
+                            </h3>
+
+                            <div class="space-y-2">
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        Temp:
+                                        <span
+                                            id="temperature-value"
+                                            class="mono"
+                                            >1.000</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="temperature-slider"
+                                        min="0.001"
+                                        max="5"
+                                        value="1"
+                                        step="0.001"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        Cool:
+                                        <span
+                                            id="cooling-rate-value"
+                                            class="mono"
+                                            >0.995</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="cooling-rate-slider"
+                                        min="0.9"
+                                        max="0.999"
+                                        value="0.995"
+                                        step="0.001"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        
+                        <!-- Enhanced Energy Function Weights -->
+                        <div class="mb-3">
+                            <h3 class="text-sm font-medium text-gray-700 mb-2">
+                                Energy Weights
+                            </h3>
+
+                            <div class="space-y-2">
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        Continuity:
+                                        <span
+                                            id="edge-weight-value"
+                                            class="mono"
+                                            >2.5</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="edge-weight"
+                                        min="0"
+                                        max="5"
+                                        value="2.5"
+                                        step="0.1"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+
+                                
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        Corners:
+                                        <span
+                                            id="pattern-weight-value"
+                                            class="mono"
+                                            >2.0</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="pattern-weight"
+                                        min="0"
+                                        max="5"
+                                        value="2.0"
+                                        step="0.1"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1"
+                                    >
+                                        Zebra:
+                                        <span
+                                            id="zebra-weight-value"
+                                            class="mono"
+                                            >2.5</span
+                                        >
+                                    </label>
+                                    <input
+                                        type="range"
+                                        id="zebra-weight"
+                                        min="0"
+                                        max="5"
+                                        value="2.5"
+                                        step="0.1"
+                                        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Termination Conditions -->
+                        <div class="mb-3">
+                            <label
+                                class="block text-sm font-medium text-gray-700 mb-1"
+                            >
+                                Max Steps:
+                                <span id="max-steps-value" class="mono text-xs"
+                                    >1000</span
+                                >
                             </label>
+                            <input
+                                type="range"
+                                id="max-steps"
+                                min="100"
+                                max="5000"
+                                value="1000"
+                                step="100"
+                                class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
                         </div>
-                    </div>
-
-                    <!-- Simulated Annealing Parameters -->
-                    <div id="annealing-controls" class="mb-3">
-                        <h3 class="text-sm font-medium text-gray-700 mb-2">Annealing</h3>
-
-                        <div class="space-y-2">
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">
-                                    Temp: <span id="temperature-value" class="mono">1.000</span>
-                                </label>
-                                <input type="range" id="temperature-slider" min="0.001" max="5" value="1" step="0.001"
-                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">
-                                    Cool: <span id="cooling-rate-value" class="mono">0.995</span>
-                                </label>
-                                <input type="range" id="cooling-rate-slider" min="0.9" max="0.999" value="0.995" step="0.001"
-                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Area Preservation -->
-                    <div class="mb-3">
-                        <label class="flex items-center">
-                            <input type="checkbox" id="area-preservation" checked class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span class="ml-1 text-sm font-medium text-gray-700">Preserve Area</span>
-                        </label>
-                    </div>
-
-                    <!-- Enhanced Energy Function Weights -->
-                    <div class="mb-3">
-                        <h3 class="text-sm font-medium text-gray-700 mb-2">Energy Weights</h3>
-
-                        <div class="space-y-2">
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">
-                                    Continuity: <span id="edge-weight-value" class="mono">2.5</span>
-                                </label>
-                                <input type="range" id="edge-weight" min="0" max="5" value="2.5" step="0.1"
-                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">
-                                    Flow: <span id="corner-weight-value" class="mono">1.8</span>
-                                </label>
-                                <input type="range" id="corner-weight" min="0" max="5" value="1.8" step="0.1"
-                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">
-                                    Corners: <span id="pattern-weight-value" class="mono">2.0</span>
-                                </label>
-                                <input type="range" id="pattern-weight" min="0" max="5" value="2.0" step="0.1"
-                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-1">
-                                    Zebra: <span id="zebra-weight-value" class="mono">2.5</span>
-                                </label>
-                                <input type="range" id="zebra-weight" min="0" max="5" value="2.5" step="0.1"
-                                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            </div>
-                        </div>
-                    </div>
-
-  
-                    <!-- Termination Conditions -->
-                    <div class="mb-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">
-                            Max Steps: <span id="max-steps-value" class="mono text-xs">1000</span>
-                        </label>
-                        <input type="range" id="max-steps" min="100" max="5000" value="1000" step="100"
-                               class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Footer -->
-    <footer class="bg-white border-t border-gray-200 mt-4">
-        <div class="w-full px-4 py-3">
-            <div class="text-center text-gray-600 text-xs">
-                <p>Grid Evolution - Interactive Cellular Automaton</p>
+        <!-- Footer -->
+        <footer class="bg-white border-t border-gray-200 mt-4">
+            <div class="w-full px-4 py-3">
+                <div class="text-center text-gray-600 text-xs">
+                    <p>Grid Evolution - Interactive Cellular Automaton</p>
+                </div>
             </div>
-        </div>
-    </footer>
+        </footer>
 
-    <script type="module">
-        // Import the GridEvolution class
-        import { GridEvolution } from './grid-evolution.js';
-        import { KernelModal } from './kernel-modal.js';
-        import { KernelVisualizer } from './kernel-visualizer.js';
+        <script type="module">
+            // Import the GridEvolution class
+            import { GridEvolution } from "./grid-evolution.js";
+            import { KernelModal } from "./kernel-modal.js";
+            import { KernelVisualizer } from "./kernel-visualizer.js";
 
-        // Global variables
-        let gridEvolution;
-        let costChart;
-        let chartUpdateInterval;
-        let kernelModal;
+            // Global variables
+            let gridEvolution;
+            let costChart;
+            let chartUpdateInterval;
+            let kernelModal;
 
-        // Initialize application when DOM is ready
-        function initializeApp() {
-            try {
-                console.log('Initializing Grid Evolution...');
+            // Initialize application when DOM is ready
+            function initializeApp() {
+                try {
+                    console.log("Initializing Grid Evolution...");
 
-                // Create GridEvolution instance
-                const canvas = document.getElementById('grid-canvas');
-                if (!canvas) {
-                    throw new Error('Canvas element not found');
+                    // Create GridEvolution instance
+                    const canvas = document.getElementById("grid-canvas");
+                    if (!canvas) {
+                        throw new Error("Canvas element not found");
+                    }
+
+                    gridEvolution = new GridEvolution("grid-canvas", {
+                        gridSize: 32,
+                        cellSize: 18,
+                        evolutionSpeed: 2,
+                    });
+
+                    console.log("GridEvolution created successfully");
+
+                    // Initialize UI components
+                    initializeCostChart();
+                    bindControls();
+                    addResetTemperatureButton();
+
+                    // Initialize kernel modal
+                    kernelModal = new KernelModal();
+                    window.kernelModal = kernelModal; // Make globally accessible
+                    bindKernelModal();
+
+                    // Initial UI updates
+                    updateAreaDisplay();
+                    updateStatusDisplay("Ready");
+
+                    console.log("Application initialized successfully");
+                } catch (error) {
+                    console.error("Initialization failed:", error);
+                    showError(
+                        "Failed to initialize application: " + error.message,
+                    );
+                } finally {
+                    hideLoadingIndicator();
+                }
+            }
+
+            function initializeCostChart() {
+                try {
+                    const chartDom = document.getElementById("cost-chart");
+                    if (!chartDom) return;
+
+                    costChart = echarts.init(chartDom);
+
+                    const option = {
+                        tooltip: {
+                            trigger: "axis",
+                            formatter: "Step {b}: Energy {c}",
+                        },
+                        xAxis: {
+                            type: "category",
+                            data: [],
+                            name: "Step",
+                        },
+                        yAxis: {
+                            type: "value",
+                            name: "Energy",
+                        },
+                        series: [
+                            {
+                                data: [],
+                                type: "line",
+                                smooth: true,
+                                lineStyle: { color: "#2563eb", width: 2 },
+                                areaStyle: { color: "rgba(37, 99, 235, 0.1)" },
+                            },
+                        ],
+                        grid: {
+                            left: "10%",
+                            right: "10%",
+                            bottom: "15%",
+                            top: "15%",
+                        },
+                    };
+
+                    costChart.setOption(option);
+                } catch (error) {
+                    console.error("Error initializing cost chart:", error);
+                }
+            }
+
+            // Add reset temperature button
+            function addResetTemperatureButton() {
+                const resetTempBtn = document.createElement("button");
+                resetTempBtn.textContent = "Reset Temperature";
+                resetTempBtn.className =
+                    "w-full mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 transition-colors";
+                resetTempBtn.addEventListener("click", () => {
+                    if (gridEvolution) {
+                        gridEvolution.resetTemperature();
+                        document.getElementById("temperature-slider").value =
+                            1.0;
+                        document.getElementById(
+                            "temperature-value",
+                        ).textContent = "1.000";
+                    }
+                });
+                document
+                    .getElementById("annealing-controls")
+                    .appendChild(resetTempBtn);
+            }
+
+            // Bind kernel modal controls
+            function bindKernelModal() {
+                const kernelModalBtn =
+                    document.getElementById("kernel-modal-btn");
+                if (kernelModalBtn && kernelModal) {
+                    kernelModalBtn.addEventListener("click", () => {
+                        kernelModal.open();
+                    });
+                }
+            }
+
+            // Control binding
+            function bindControls() {
+                // Note: Main control buttons are now handled by UIController
+                // This function now only handles additional UI elements
+
+                // Bind additional controls that are not handled by UIController
+                bindAdditionalControls();
+            }
+
+            function bindAdditionalControls() {
+                // Start chart updates when simulation starts
+                const startBtn = document.getElementById("start-btn");
+                if (startBtn) {
+                    startBtn.addEventListener("click", () => {
+                        startChartUpdate();
+                    });
                 }
 
-                gridEvolution = new GridEvolution('grid-canvas', {
-                    gridSize: 32,
-                    cellSize: 18,
-                    evolutionSpeed: 2
-                });
+                // Stop chart updates when simulation is paused or stopped
+                const pauseBtn = document.getElementById("pause-btn");
+                if (pauseBtn) {
+                    pauseBtn.addEventListener("click", () => {
+                        stopChartUpdate();
+                    });
+                }
 
-                console.log('GridEvolution created successfully');
+                // Start chart updates when resuming
+                const resumeBtn = document.getElementById("resume-btn");
+                if (resumeBtn) {
+                    resumeBtn.addEventListener("click", () => {
+                        startChartUpdate();
+                    });
+                }
 
-                // Initialize UI components
-                initializeCostChart();
-                bindControls();
-                addResetTemperatureButton();
+                // Update chart after single step
+                const stepBtn = document.getElementById("step-btn");
+                if (stepBtn) {
+                    stepBtn.addEventListener("click", () => {
+                        updateCostChart();
+                    });
+                }
 
-                // Initialize kernel modal
-                kernelModal = new KernelModal();
-                window.kernelModal = kernelModal; // Make globally accessible
-                bindKernelModal();
+                // Update chart after reset
+                const resetBtn = document.getElementById("reset-btn");
+                if (resetBtn) {
+                    resetBtn.addEventListener("click", () => {
+                        updateCostChart();
+                    });
+                }
 
-                // Initial UI updates
-                updateAreaDisplay();
-                updateStatusDisplay('Ready');
-
-                console.log('Application initialized successfully');
-
-            } catch (error) {
-                console.error('Initialization failed:', error);
-                showError('Failed to initialize application: ' + error.message);
-            } finally {
-                hideLoadingIndicator();
+                // Update chart after randomize
+                const randomBtn = document.getElementById("random-btn");
+                if (randomBtn) {
+                    randomBtn.addEventListener("click", () => {
+                        updateCostChart();
+                    });
+                }
             }
-        }
 
-        function initializeCostChart() {
-            try {
-                const chartDom = document.getElementById('cost-chart');
-                if (!chartDom) return;
+            // Chart update functions
+            function updateCostChart() {
+                if (!costChart || !gridEvolution) return;
 
-                costChart = echarts.init(chartDom);
+                try {
+                    const steps = Array.from(
+                        { length: gridEvolution.getCostHistory().length },
+                        (_, i) => i,
+                    );
+                    const costHistory = gridEvolution.getCostHistory();
 
-                const option = {
-                    tooltip: {
-                        trigger: 'axis',
-                        formatter: 'Step {b}: Energy {c}'
-                    },
-                    xAxis: {
-                        type: 'category',
-                        data: [],
-                        name: 'Step'
-                    },
-                    yAxis: {
-                        type: 'value',
-                        name: 'Energy'
-                    },
-                    series: [{
-                        data: [],
-                        type: 'line',
-                        smooth: true,
-                        lineStyle: { color: '#2563eb', width: 2 },
-                        areaStyle: { color: 'rgba(37, 99, 235, 0.1)' }
-                    }],
-                    grid: {
-                        left: '10%',
-                        right: '10%',
-                        bottom: '15%',
-                        top: '15%'
+                    costChart.setOption({
+                        xAxis: { data: steps },
+                        series: [{ data: costHistory }],
+                    });
+                } catch (error) {
+                    console.error("Error updating cost chart:", error);
+                }
+            }
+
+            function startChartUpdate() {
+                if (chartUpdateInterval) return;
+
+                chartUpdateInterval = setInterval(() => {
+                    updateCostChart();
+                }, 100);
+            }
+
+            function stopChartUpdate() {
+                if (chartUpdateInterval) {
+                    clearInterval(chartUpdateInterval);
+                    chartUpdateInterval = null;
+                }
+            }
+
+            // UI update functions
+            function updateAreaDisplay() {
+                if (!gridEvolution) return;
+
+                const stats = gridEvolution.getGridStats();
+                const areaElement = document.getElementById("area-display");
+                const targetElement = document.getElementById("target-area");
+
+                if (areaElement && targetElement) {
+                    areaElement.textContent = `${stats.totalArea.toFixed(1)} / ${stats.targetArea}`;
+                    targetElement.textContent = stats.targetArea;
+                }
+            }
+
+            function updateStatusDisplay(status) {
+                const statusElement = document.getElementById("status-display");
+                const stepElement = document.getElementById("step-counter");
+                const costElement = document.getElementById("cost-display");
+
+                if (statusElement) {
+                    statusElement.textContent = status;
+                }
+
+                if (gridEvolution) {
+                    // Update step counter if method exists
+                    if (
+                        stepElement &&
+                        typeof gridEvolution.getCurrentStep === "function"
+                    ) {
+                        stepElement.textContent =
+                            gridEvolution.getCurrentStep();
                     }
+
+                    // Update cost display if method exists
+                    if (
+                        costElement &&
+                        typeof gridEvolution.getCurrentCost === "function"
+                    ) {
+                        costElement.textContent = gridEvolution
+                            .getCurrentCost()
+                            .toFixed(3);
+                    }
+                }
+            }
+
+            function hideLoadingIndicator() {
+                const loading = document.getElementById("loading-indicator");
+                if (loading) {
+                    loading.style.display = "none";
+                }
+            }
+
+            function getStateName(state) {
+                const stateNames = {
+                    0: "Empty",
+                    1: "Full",
+                    2: "Diagonal TL-BR",
+                    3: "Diagonal TR-BL",
+                    4: "Diagonal BL-TR",
+                    5: "Diagonal BR-TL",
                 };
-
-                costChart.setOption(option);
-            } catch (error) {
-                console.error('Error initializing cost chart:', error);
-            }
-        }
-
-        // Add reset temperature button
-        function addResetTemperatureButton() {
-            const resetTempBtn = document.createElement('button');
-            resetTempBtn.textContent = 'Reset Temperature';
-            resetTempBtn.className = 'w-full mt-2 px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 transition-colors';
-            resetTempBtn.addEventListener('click', () => {
-                if (gridEvolution) {
-                    gridEvolution.resetTemperature();
-                    document.getElementById('temperature-slider').value = 1.0;
-                    document.getElementById('temperature-value').textContent = '1.000';
-                }
-            });
-            document.getElementById('annealing-controls').appendChild(resetTempBtn);
-        }
-
-        // Bind kernel modal controls
-        function bindKernelModal() {
-            const kernelModalBtn = document.getElementById('kernel-modal-btn');
-            if (kernelModalBtn && kernelModal) {
-                kernelModalBtn.addEventListener('click', () => {
-                    kernelModal.open();
-                });
-            }
-        }
-
-        // Control binding
-        function bindControls() {
-            // Main control buttons
-            document.getElementById('start-btn').addEventListener('click', () => {
-                if (gridEvolution) {
-                    gridEvolution.startEvolution();
-                    startChartUpdate();
-                    updateStatusDisplay('Running');
-                }
-            });
-
-            document.getElementById('pause-btn').addEventListener('click', () => {
-                if (gridEvolution) {
-                    gridEvolution.pauseEvolution();
-                    stopChartUpdate();
-                    updateStatusDisplay('Paused');
-                }
-            });
-
-            document.getElementById('step-btn').addEventListener('click', () => {
-                if (gridEvolution) {
-                    gridEvolution.stepEvolution();
-                    updateCostChart();
-                    updateStatusDisplay('Stepped');
-                }
-            });
-
-            document.getElementById('reset-btn').addEventListener('click', () => {
-                if (gridEvolution) {
-                    gridEvolution.resetGrid();
-                    updateCostChart();
-                    updateStatusDisplay('Reset');
-                }
-            });
-
-            document.getElementById('random-btn').addEventListener('click', () => {
-                if (gridEvolution) {
-                    gridEvolution.randomizeGrid();
-                    updateCostChart();
-                    updateStatusDisplay('Randomized');
-                }
-            });
-
-            // Preset selector
-            document.getElementById('preset-select').addEventListener('change', (e) => {
-                if (gridEvolution && e.target.value) {
-                    gridEvolution.applyPreset(e.target.value);
-                    updateCostChart();
-                    updateStatusDisplay(`Preset: ${e.target.value}`);
-                }
-            });
-
-            // Grid size selector
-            document.getElementById('grid-size-select').addEventListener('change', (e) => {
-                if (gridEvolution) {
-                    const size = parseInt(e.target.value);
-                    gridEvolution.resizeGrid(size);
-                    updateCostChart();
-                    updateStatusDisplay(`Grid: ${size}×${size}`);
-                }
-            });
-
-            // Speed slider
-            document.getElementById('speed-slider').addEventListener('input', (e) => {
-                const speed = parseInt(e.target.value);
-                document.getElementById('speed-value').textContent = `${speed}ms`;
-                if (gridEvolution) {
-                    gridEvolution.setEvolutionSpeed(speed);
-                }
-            });
-
-            // Temperature slider
-            document.getElementById('temperature-slider').addEventListener('input', (e) => {
-                const temp = parseFloat(e.target.value);
-                document.getElementById('temperature-value').textContent = temp.toFixed(3);
-                if (gridEvolution) {
-                    gridEvolution.setTemperature(temp);
-                }
-            });
-
-            // Cooling rate slider
-            document.getElementById('cooling-rate-slider').addEventListener('input', (e) => {
-                const rate = parseFloat(e.target.value);
-                document.getElementById('cooling-rate-value').textContent = rate.toFixed(3);
-                if (gridEvolution) {
-                    gridEvolution.setCoolingRate(rate);
-                }
-            });
-
-            // Weight sliders
-            const weightControls = [
-                { id: 'edge-weight', display: 'edge-weight-value', property: 'edgeWeight' },
-                { id: 'corner-weight', display: 'corner-weight-value', property: 'cornerWeight' },
-                { id: 'pattern-weight', display: 'pattern-weight-value', property: 'patternWeight' },
-                { id: 'zebra-weight', display: 'zebra-weight-value', property: 'zebraWeight' }
-            ];
-
-            weightControls.forEach(control => {
-                document.getElementById(control.id).addEventListener('input', (e) => {
-                    const value = parseFloat(e.target.value);
-                    document.getElementById(control.display).textContent = value.toFixed(1);
-                    if (gridEvolution) {
-                        gridEvolution.setWeight(control.property, value);
-                    }
-                });
-            });
-
-            // Max steps slider
-            document.getElementById('max-steps').addEventListener('input', (e) => {
-                const steps = parseInt(e.target.value);
-                document.getElementById('max-steps-value').textContent = steps;
-                if (gridEvolution) {
-                    gridEvolution.setMaxSteps(steps);
-                }
-            });
-
-            // Evolution method radio buttons
-            document.querySelectorAll('input[name="evolution-method"]').forEach(radio => {
-                radio.addEventListener('change', (e) => {
-                    if (gridEvolution) {
-                        gridEvolution.setEvolutionMethod(e.target.value);
-                        updateStatusDisplay(`Method: ${e.target.value}`);
-                    }
-                });
-            });
-
-            // Area preservation checkbox
-            document.getElementById('area-preservation').addEventListener('change', (e) => {
-                if (gridEvolution) {
-                    gridEvolution.setAreaPreservation(e.target.checked);
-                    updateStatusDisplay(`Area preservation: ${e.target.checked ? 'ON' : 'OFF'}`);
-                }
-            });
-        }
-
-        // Chart update functions
-        function updateCostChart() {
-            if (!costChart || !gridEvolution) return;
-
-            try {
-                const steps = Array.from({length: gridEvolution.getCostHistory().length}, (_, i) => i);
-                const costHistory = gridEvolution.getCostHistory();
-
-                costChart.setOption({
-                    xAxis: { data: steps },
-                    series: [{ data: costHistory }]
-                });
-            } catch (error) {
-                console.error('Error updating cost chart:', error);
-            }
-        }
-
-        function startChartUpdate() {
-            if (chartUpdateInterval) return;
-
-            chartUpdateInterval = setInterval(() => {
-                updateCostChart();
-            }, 100);
-        }
-
-        function stopChartUpdate() {
-            if (chartUpdateInterval) {
-                clearInterval(chartUpdateInterval);
-                chartUpdateInterval = null;
-            }
-        }
-
-        // UI update functions
-        function updateAreaDisplay() {
-            if (!gridEvolution) return;
-
-            const stats = gridEvolution.getGridStats();
-            const areaElement = document.getElementById('area-display');
-            const targetElement = document.getElementById('target-area');
-
-            if (areaElement && targetElement) {
-                areaElement.textContent = `${stats.totalArea.toFixed(1)} / ${stats.targetArea}`;
-                targetElement.textContent = stats.targetArea;
-            }
-        }
-
-        function updateStatusDisplay(status) {
-            const statusElement = document.getElementById('status-display');
-            const stepElement = document.getElementById('step-counter');
-            const costElement = document.getElementById('cost-display');
-
-            if (statusElement) {
-                statusElement.textContent = status;
+                return stateNames[state] || `State ${state}`;
             }
 
-            if (gridEvolution) {
-                // Update step counter if method exists
-                if (stepElement && typeof gridEvolution.getCurrentStep === 'function') {
-                    stepElement.textContent = gridEvolution.getCurrentStep();
-                }
-
-                // Update cost display if method exists
-                if (costElement && typeof gridEvolution.getCurrentCost === 'function') {
-                    costElement.textContent = gridEvolution.getCurrentCost().toFixed(3);
-                }
+            function showError(message) {
+                const errorDiv = document.createElement("div");
+                errorDiv.className = "error-message";
+                errorDiv.textContent = message;
+                document.body.insertBefore(errorDiv, document.body.firstChild);
             }
-        }
 
-        function hideLoadingIndicator() {
-            const loading = document.getElementById('loading-indicator');
-            if (loading) {
-                loading.style.display = 'none';
+            // Initialize when DOM is ready
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", initializeApp);
+            } else {
+                initializeApp();
             }
-        }
-
-        function showError(message) {
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error-message';
-            errorDiv.textContent = message;
-            document.body.insertBefore(errorDiv, document.body.firstChild);
-        }
-
-        // Initialize when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeApp);
-        } else {
-            initializeApp();
-        }
-    </script>
-</body>
+        </script>
+    </body>
 </html>

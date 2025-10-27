@@ -182,21 +182,29 @@ export class KernelVisualizer {
   }
 
   /**
-   * Create a display showing kernel values in matrix format
+   * Create a display showing kernel values in matrix format (click-expandable)
    * @param {Array<Array<number>>} kernel - 2D kernel array
    * @returns {HTMLElement} - Values display element
    */
   createKernelValuesDisplay(kernel) {
     const wrapper = document.createElement("div");
-    wrapper.className = "mt-3 p-2 bg-gray-50 rounded text-xs";
+    wrapper.className = "mt-3 p-2 bg-gray-50 rounded text-xs cursor-pointer hover:bg-gray-100 transition-colors";
+    wrapper.style.position = "relative";
 
     const title = document.createElement("div");
-    title.className = "font-semibold text-gray-700 mb-1";
-    title.textContent = "Kernel Matrix:";
+    title.className = "font-semibold text-gray-700 mb-1 flex items-center justify-between";
+    title.innerHTML = `
+      <span>Kernel Matrix:</span>
+      <span class="expand-icon text-gray-400 text-xs">▶</span>
+    `;
     wrapper.appendChild(title);
 
+    // Collapsible content
+    const content = document.createElement("div");
+    content.className = "kernel-matrix-content overflow-hidden transition-all duration-300 max-h-0";
+
     const pre = document.createElement("pre");
-    pre.className = "mono text-gray-600 whitespace-pre";
+    pre.className = "mono text-gray-600 whitespace-pre text-xs";
 
     // Format kernel as matrix string
     const matrixString = kernel
@@ -213,9 +221,45 @@ export class KernelVisualizer {
       .join(",\n ");
 
     pre.textContent = "[\n " + matrixString + "\n]";
-    wrapper.appendChild(pre);
+    content.appendChild(pre);
+    wrapper.appendChild(content);
+
+    // Click handler for expansion
+    wrapper.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleMatrixExpansion(wrapper, content);
+    });
 
     return wrapper;
+  }
+
+  /**
+   * Toggle expansion of kernel matrix display
+   * @param {HTMLElement} wrapper - The wrapper element
+   * @param {HTMLElement} content - The content element to expand/collapse
+   */
+  toggleMatrixExpansion(wrapper, content) {
+    const isExpanded = content.classList.contains("expanded");
+    const expandIcon = wrapper.querySelector(".expand-icon");
+
+    if (isExpanded) {
+      // Collapse
+      content.classList.remove("expanded");
+      content.style.maxHeight = "0";
+      expandIcon.textContent = "▶";
+      wrapper.classList.remove("expanded");
+    } else {
+      // Expand
+      content.classList.add("expanded");
+      content.style.maxHeight = content.scrollHeight + "px";
+      expandIcon.textContent = "▼";
+      wrapper.classList.add("expanded");
+
+      // Smooth scroll to view the expanded content
+      setTimeout(() => {
+        wrapper.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
+    }
   }
 
   /**

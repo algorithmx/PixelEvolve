@@ -4,7 +4,6 @@
  */
 
 import { KernelVisualizer } from './kernel-visualizer.js';
-import { ZebraKernels } from './zebra-kernels.js';
 import { GeometricKernels } from './geometric-kernels.js';
 
 export class KernelModal {
@@ -13,7 +12,6 @@ export class KernelModal {
         this.visualizer = null;
         this.customVisualizer = null; // Separate visualizer for custom kernels
         this.isOpen = false;
-        this.zebraKernels = null;
         this.geometricKernels = null;
 
         this.initializeModal();
@@ -273,7 +271,6 @@ export class KernelModal {
         this.customVisualizer.debugMode = false;
 
         // Initialize all kernel systems
-        this.zebraKernels = new ZebraKernels(32); // Default size
         this.geometricKernels = new GeometricKernels(32); // Default size
     }
 
@@ -281,7 +278,7 @@ export class KernelModal {
      * Load and display all existing kernels
      */
     loadExistingKernels() {
-        if (!this.visualizer || !this.zebraKernels || !this.geometricKernels) return;
+        if (!this.visualizer || !this.geometricKernels) return;
 
         const container = document.getElementById('kernels-container');
         const legendContainer = document.getElementById('kernel-legend-container');
@@ -300,15 +297,12 @@ export class KernelModal {
         const legend = this.visualizer.createLegend();
         legendContainer.appendChild(legend);
 
-        // 1. Load Zebra Pattern Kernels
-        this.addKernelSection('Zebra Pattern Detection Kernels', this.zebraKernels.kernels);
-
-        // 2. Load Geometric Kernels (organized by category)
+        // Load Geometric Kernels (organized by category)
         const allGeometricKernels = this.geometricKernels.getAllKernels();
 
         this.addKernelSection('Corner Detection Kernels', allGeometricKernels.corners);
         this.addKernelSection('Continuity Detection Kernels', allGeometricKernels.continuity);
-        this.addKernelSection('Directional Flow Kernels', allGeometricKernels.flow);
+        this.addKernelSection('Zebra Pattern Detection Kernels', allGeometricKernels.zebra);
     }
 
     /**
