@@ -639,7 +639,7 @@ export class UIController {
 
         let isDragging = false;
         let startX, startY;
-        let currentRect = null;
+        let dragMode = null; // 'fill' or 'erase'
 
         const getMousePos = (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -649,7 +649,7 @@ export class UIController {
             };
         };
 
-        const drawPreview = (startCell, endCell) => {
+        const drawPreview = (startCell, endCell, mode = 'fill') => {
             // Re-render the grid first
             if (this.currentGrid && this.currentStates) {
                 gridRenderer.render(this.currentGrid, this.currentStates);
@@ -661,21 +661,37 @@ export class UIController {
             const minCol = Math.min(startCell.col, endCell.col);
             const maxCol = Math.max(startCell.col, endCell.col);
 
+            const color = mode === 'erase' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(37, 99, 235, 0.3)';
             for (let row = minRow; row <= maxRow; row++) {
                 for (let col = minCol; col <= maxCol; col++) {
-                    gridRenderer.highlightCell(row, col, 'rgba(37, 99, 235, 0.3)');
+                    gridRenderer.highlightCell(row, col, color);
+                }
+            }
+        };
+
+        const applyRectangle = (minRow, minCol, maxRow, maxCol, mode = 'fill') => {
+            const targetState = mode === 'erase' ? gridCore.STATES.EMPTY : gridCore.STATES.FULL;
+            for (let row = minRow; row <= maxRow; row++) {
+                for (let col = minCol; col <= maxCol; col++) {
+                    gridCore.setCell(row, col, targetState);
                 }
             }
         };
 
         canvas.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return; // Only left click
+            // Require Ctrl to initiate drag drawing
+            if (!e.ctrlKey) {
+                // Let normal click handler process this
+                return;
+            }
 
             const mousePos = getMousePos(e);
             const cell = gridRenderer.getCellFromCanvasPosition(mousePos.x, mousePos.y);
 
             if (cell.valid) {
                 isDragging = true;
+                dragMode = e.shiftKey ? 'erase' : 'fill';
                 startX = cell.col;
                 startY = cell.row;
                 canvas.style.cursor = 'crosshair';
@@ -685,20 +701,62 @@ export class UIController {
 
         canvas.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
+            // If Ctrl is released during drag, cancel the drag and clear preview
+            if (!e.ctrlKey) {
+                isDragging = false;
+                dragMode = null;
+                canvas.style.cursor = 'default';
+                if (this.currentGrid && this.currentStates) {
+                    gridRenderer.render(this.currentGrid, this.currentStates);
+                }
+                return;
+            }
+            // If erase mode was initiated, require Shift to stay held; otherwise cancel
+            if (dragMode === 'erase' && !e.shiftKey) {
+                isDragging = false;
+                dragMode = null;
+                canvas.style.cursor = 'default';
+                if (this.currentGrid && this.currentStates) {
+                    gridRenderer.render(this.currentGrid, this.currentStates);
+                }
+                return;
+            }
 
             const mousePos = getMousePos(e);
             const cell = gridRenderer.getCellFromCanvasPosition(mousePos.x, mousePos.y);
 
             if (cell.valid) {
                 const endCell = { row: cell.row, col: cell.col };
-                drawPreview({ row: startY, col: startX }, endCell);
+                drawPreview({ row: startY, col: startX }, endCell, dragMode || 'fill');
             }
         });
 
         canvas.addEventListener('mouseup', (e) => {
             if (!isDragging) return;
+            // If Ctrl not held on mouseup, treat as canceled drag
+            if (!e.ctrlKey) {
+                isDragging = false;
+                dragMode = null;
+                canvas.style.cursor = 'default';
+                if (this.currentGrid && this.currentStates) {
+                    gridRenderer.render(this.currentGrid, this.currentStates);
+                }
+                return;
+            }
+            // If erase mode, require Shift held at mouseup
+            if (dragMode === 'erase' && !e.shiftKey) {
+                isDragging = false;
+                dragMode = null;
+                canvas.style.cursor = 'default';
+                if (this.currentGrid && this.currentStates) {
+                    gridRenderer.render(this.currentGrid, this.currentStates);
+                }
+                return;
+            }
 
             isDragging = false;
+            const finalMode = dragMode || 'fill';
+            dragMode = null;
             canvas.style.cursor = 'default';
 
             const mousePos = getMousePos(e);
@@ -714,12 +772,8 @@ export class UIController {
                 const minCol = Math.min(startX, endCol);
                 const maxCol = Math.max(startX, endCol);
 
-                // Fill the rectangle
-                for (let row = minRow; row <= maxRow; row++) {
-                    for (let col = minCol; col <= maxCol; col++) {
-                        gridCore.setCell(row, col, 1); // 1 = FULL state
-                    }
-                }
+                // Apply the rectangle with selected mode
+                applyRectangle(minRow, minCol, maxRow, maxCol, finalMode);
 
                 // Final render
                 if (this.currentGrid && this.currentStates) {
@@ -736,6 +790,7 @@ export class UIController {
         canvas.addEventListener('mouseleave', () => {
             if (isDragging) {
                 isDragging = false;
+                dragMode = null;
                 canvas.style.cursor = 'default';
                 // Re-render to clear preview
                 if (this.currentGrid && this.currentStates) {

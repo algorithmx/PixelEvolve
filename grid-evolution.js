@@ -212,6 +212,9 @@ export class GridEvolution {
       // Set up drag-and-drop rectangle drawing as additional feature
       this.setupDragRectangle();
 
+  // Set up click-to-toggle cell drawing (unmodified clicks)
+  this.setupClickToggle();
+
       // Set initial status
       SimulationStatus.setStatus(SimulationStatus.STATUS.IDLE);
       this.updateStatus("Ready");
@@ -727,6 +730,44 @@ export class GridEvolution {
         this.updateUI();
       },
     );
+  }
+
+  // Set up click handler to toggle individual cells on normal click
+  setupClickToggle() {
+    const canvas = this.renderer?.canvas;
+    if (!canvas) return;
+
+    // Bind only once
+    if (this._clickHandlerBound) return;
+    this._clickHandlerBound = true;
+
+    const getMousePos = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    this.uiController.bindCanvasClickHandler(canvas, (e) => {
+      // If Ctrl is held, it's reserved for drag-rectangle; skip click toggle
+      if (e.ctrlKey) return;
+
+      const pos = getMousePos(e);
+      const cell = this.renderer.getCellFromCanvasPosition(pos.x, pos.y);
+      if (!cell.valid) return;
+
+      // Toggle cell state
+      this.toggleCell(cell.row, cell.col);
+
+      // Recalculate energy/cost
+      this.evolutionEngine.currentEnergy = this.energySystem.calculateEnergy(
+        this.gridCore.grid,
+        this.gridCore.STATES,
+      );
+      this.evolutionEngine.currentCost = this.evolutionEngine.currentEnergy;
+
+      // Re-render and update UI
+      this.render();
+      this.updateUI();
+    });
   }
 
   // Snapshot functionality - captures PNG image
