@@ -87,7 +87,7 @@ export class GridEvolution {
   }
 
   initializeComponents(canvas) {
-    // Initialize grid core
+  // Initialize grid core
     this.gridCore = new GridCore(this.config.gridSize || 32, this.config);
 
     // Initialize renderer
@@ -96,6 +96,8 @@ export class GridEvolution {
       padding: this.config.padding || 10,
       debugMode: this.debugMode,
     });
+    // Provide non-uniform grid points to renderer
+    this.renderer.setGridPoints(this.gridCore.xPoints, this.gridCore.yPoints);
 
     // Initialize energy system
     this.energySystem = new EnhancedEnergySystem(this.gridCore.gridSize, {
@@ -156,6 +158,14 @@ export class GridEvolution {
         this.setIsingJ2(value),
       onMaxStepsChange: (value) => this.setMaxSteps(value),
       onPresetChange: (preset) => this.applyPreset(preset),
+      onSnapshot: () => this.takeSnapshot(),
+      // Non-uniform grid: apply and randomize
+      onGridPointsApply: ({ xPoints, yPoints }) => this.applyGridPoints(xPoints, yPoints),
+      onGridPointsRandom: (jitter) => this.randomizeGridPoints(jitter),
+      onGridPointsUniform: () => this.setUniformGridPoints(),
+      // Boundary markers
+      onMarkersApply: (spec) => this.applyBoundaryMarkers(spec),
+      onMarkersClear: () => this.clearBoundaryMarkers(),
     });
 
     // Update UI with current values
@@ -345,7 +355,13 @@ export class GridEvolution {
     this.logImportant("Grid reset");
     this.stopEvolution();
     this.evolutionEngine.reset();
-    this.gridCore.reset();
+    // Clear cells to an empty grid instead of generating an initial pattern
+    if (typeof this.gridCore.clearGrid === 'function') {
+      this.gridCore.clearGrid();
+    } else {
+      // Fallback to previous behavior if method not present
+      this.gridCore.reset();
+    }
     this.calculateInitialState();
     SimulationStatus.setStatus(SimulationStatus.STATUS.IDLE);
     this.render();
@@ -371,6 +387,8 @@ export class GridEvolution {
     // Resize components
     this.gridCore.resize(newSize);
     this.renderer.resize(newSize);
+  // Update renderer with (re)initialized points
+  this.renderer.setGridPoints(this.gridCore.xPoints, this.gridCore.yPoints);
     this.energySystem.gridSize = newSize;
     this.energySystem.geometricKernels.updateGridSize(newSize);
     this.evolutionEngine.gridSize = newSize;
@@ -381,6 +399,54 @@ export class GridEvolution {
     this.calculateInitialState();
     this.render();
     this.updateUI();
+  }
+
+  // Non-uniform grid API
+  applyGridPoints(xPoints, yPoints) {
+    const ok = this.gridCore.setGridPointsNormalized(xPoints, yPoints);
+    if (!ok) {
+      this.uiController.showMessage('Invalid grid points. Provide either N widths or N+1 boundaries in [0,1].', 'error');
+      return;
+    }
+    this.renderer.setGridPoints(this.gridCore.xPoints, this.gridCore.yPoints);
+    this.render();
+    this.updateUI();
+    this.uiController.showMessage('Applied non-uniform grid points.', 'success');
+  }
+
+  randomizeGridPoints(jitter = 0.35) {
+    this.gridCore.xPoints = GridCore.generateRandomPoints(this.gridCore.gridSize, jitter);
+    this.gridCore.yPoints = GridCore.generateRandomPoints(this.gridCore.gridSize, jitter);
+    this.renderer.setGridPoints(this.gridCore.xPoints, this.gridCore.yPoints);
+    this.render();
+    this.updateUI();
+    this.uiController.showMessage('Randomized non-uniform grid points.', 'success');
+  }
+
+  setUniformGridPoints() {
+    this.gridCore.xPoints = GridCore.generateUniformPoints(this.gridCore.gridSize);
+    this.gridCore.yPoints = GridCore.generateUniformPoints(this.gridCore.gridSize);
+    this.renderer.setGridPoints(this.gridCore.xPoints, this.gridCore.yPoints);
+    this.render();
+    this.updateUI();
+    this.uiController.showMessage('Switched to uniform grid points.', 'success');
+  }
+
+  // Boundary markers API
+  applyBoundaryMarkers(spec) {
+    const result = this.gridCore.setBoundaryMarkers(spec);
+    if (!result.ok) {
+      this.uiController.showMessage(`Markers applied with ${result.errors.length} issue(s): ${result.errors[0]}`, 'error');
+    } else {
+      this.uiController.showMessage('Markers applied.', 'success');
+    }
+    this.render();
+  }
+
+  clearBoundaryMarkers() {
+    this.gridCore.clearBoundaryMarkers();
+    this.uiController.showMessage('Markers cleared.', 'success');
+    this.render();
   }
 
   setEvolutionSpeed(speed) {
@@ -550,6 +616,8 @@ export class GridEvolution {
       this.gridCore.STATES,
     );
 
+    // Ensure renderer has latest markers before rendering
+    this.renderer.setMarkers(this.gridCore.getBoundaryMarkers());
     this.renderer.render(this.gridCore.grid, this.gridCore.STATES);
   }
 
@@ -659,6 +727,93 @@ export class GridEvolution {
         this.updateUI();
       },
     );
+  }
+
+  // Snapshot functionality - captures PNG image
+  takeSnapshot() {
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+      const baseFilename = `grid_snapshot_${dateStr}_${timeStr}`;
+
+      // Save PNG image of the canvas
+      this.saveCanvasAsPNG(baseFilename);
+
+      // Also save a JSON snapshot including non-uniform grid points
+      this.saveSnapshotJSON(baseFilename);
+
+      this.logImportant(`PNG snapshot saved: ${baseFilename}.png`);
+      this.uiController.showMessage(`Snapshot saved: ${baseFilename}.png and ${baseFilename}.json`, 'success');
+
+    } catch (error) {
+      this.logError('Error taking snapshot:', error);
+      this.uiController.showMessage('Error saving snapshot. Check console for details.', 'error');
+    }
+  }
+
+  // Save canvas as PNG image
+  saveCanvasAsPNG(baseFilename) {
+    const canvas = this.renderer.canvas;
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${baseFilename}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // Save grid configuration as JSON
+  saveSnapshotJSON(baseFilename) {
+    // Create snapshot object with comprehensive configuration
+    const snapshot = {
+      timestamp: new Date().toISOString(),
+      gridSize: this.gridCore.gridSize,
+      grid: this.gridCore.grid.map(row => [...row]), // Deep copy
+      totalArea: this.gridCore.totalArea,
+      targetArea: this.gridCore.targetArea,
+      // Include non-uniform normalized grid points
+      xPoints: Array.isArray(this.gridCore.xPoints) ? [...this.gridCore.xPoints] : null,
+      yPoints: Array.isArray(this.gridCore.yPoints) ? [...this.gridCore.yPoints] : null,
+      stats: {
+        energy: this.evolutionEngine.currentEnergy || 0,
+        cost: this.evolutionEngine.currentCost || 0,
+        temperature: this.evolutionEngine.getCurrentTemperature(),
+        step: this.evolutionEngine.currentStep,
+      },
+      parameters: {
+        temperature: this.evolutionEngine.temperature,
+        coolingRate: this.evolutionEngine.coolingRate,
+        maxSteps: this.evolutionEngine.maxSteps,
+      },
+      energyWeights: {
+        geometricContinuity: this.energySystem.energyWeights.geometricContinuity,
+        sharpCorners: this.energySystem.energyWeights.sharpCorners,
+        zebraPatterns: this.energySystem.energyWeights.zebraPatterns,
+        neighborEnergy: this.energySystem.energyWeights.neighborEnergy,
+        isingEnergy: this.energySystem.energyWeights.isingEnergy,
+        isingJ1: this.energySystem.isingJ1,
+        isingJ2: this.energySystem.isingJ2,
+      },
+    };
+
+    // Convert to JSON string
+    const jsonContent = JSON.stringify(snapshot, null, 2);
+
+    // Create blob and download
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${baseFilename}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   // Cleanup method

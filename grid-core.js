@@ -15,9 +15,22 @@ export class GridCore {
             HALF_DIAG_BR_TL: 5   // Bottom-right to top-left
         };
 
-        // Precomputed state inventories for efficient sampling
+    // Precomputed state inventories for efficient sampling
         this.stateInventories = null;
         this.inventoryValid = false;
+
+    // Non-uniform grid support: normalized grid line positions in [0,1]
+    // Arrays length = gridSize + 1, monotonic with 0 at start and 1 at end
+    this.xPoints = null; // horizontal axis grid lines (columns boundaries)
+    this.yPoints = null; // vertical axis grid lines (row boundaries)
+
+        // Boundary markers: two groups of edge markers that never overlap
+        // Structure: { group1: {top:[], right:[], bottom:[], left:[]}, group2: {...} }
+        // Each marker: { side: 'top'|'right'|'bottom'|'left', start: Number, length: Number }
+        this.boundaryMarkers = {
+            group1: { top: [], right: [], bottom: [], left: [] },
+            group2: { top: [], right: [], bottom: [], left: [] }
+        };
 
         // Initialize grid
         this.initializeGrid();
@@ -33,6 +46,9 @@ export class GridCore {
         // Invalidate state inventories - will be computed on demand
         this.inventoryValid = false;
 
+        // Initialize non-uniform grid points
+        this.initializeGridPoints(this.config);
+
         // Create initial pattern for immediate visualization
         this.createInitialPattern();
 
@@ -41,6 +57,108 @@ export class GridCore {
             totalArea: this.totalArea,
             targetArea: this.targetArea
         };
+    }
+
+    // Initialize xPoints and yPoints as normalized arrays in [0,1]
+    initializeGridPoints(config = {}) {
+        const mode = config.gridPointsMode || 'random'; // 'random' | 'uniform' | 'manual'
+        const xManual = config.xPoints;
+        const yManual = config.yPoints;
+        const jitter = typeof config.gridJitter === 'number' ? config.gridJitter : 0.35; // 0..1
+
+        if (mode === 'manual' && Array.isArray(xManual) && Array.isArray(yManual)) {
+            const valid = this.setGridPointsNormalized(xManual, yManual);
+            if (valid) return;
+            // Fallback if invalid
+        }
+
+        if (mode === 'uniform') {
+            this.xPoints = GridCore.generateUniformPoints(this.gridSize);
+            this.yPoints = GridCore.generateUniformPoints(this.gridSize);
+        } else {
+            // default random jittered widths
+            this.xPoints = GridCore.generateRandomPoints(this.gridSize, jitter);
+            this.yPoints = GridCore.generateRandomPoints(this.gridSize, jitter);
+        }
+    }
+
+    // Static helper: uniform normalized grid lines [0..1]
+    static generateUniformPoints(n) {
+        const arr = new Array(n + 1);
+        for (let i = 0; i <= n; i++) arr[i] = i / n;
+        return arr;
+    }
+
+    // Static helper: random widths with jitter around uniform, normalized to [0,1]
+    static generateRandomPoints(n, jitter = 0.35) {
+        // Generate n positive widths that sum to 1, centered around 1/n
+        // width_i = max(eps, (1/n) * (1 + noise_i)), noise ~ U(-jitter, +jitter)
+        const widths = [];
+        const base = 1 / n;
+        const eps = 1e-6;
+        for (let i = 0; i < n; i++) {
+            const noise = (Math.random() * 2 - 1) * jitter;
+            widths.push(Math.max(eps, base * (1 + noise)));
+        }
+        // Normalize to sum 1
+        const sum = widths.reduce((a, b) => a + b, 0);
+        const norm = widths.map(w => w / sum);
+        // Build cumulative boundaries
+        const points = [0];
+        let acc = 0;
+        for (let i = 0; i < n; i++) {
+            acc += norm[i];
+            points.push(acc);
+        }
+        points[0] = 0;
+        points[points.length - 1] = 1;
+        return points;
+    }
+
+    // Accept either boundaries (length n+1) in [0,1] monotonic, or widths (length n) positives
+    setGridPointsNormalized(xArr, yArr) {
+        const validateAndNormalize = (arr) => {
+            if (!Array.isArray(arr)) return null;
+            if (arr.length === this.gridSize + 1) {
+                // boundaries
+                const a = arr.map(Number);
+                if (a.some(v => !isFinite(v))) return null;
+                // Ensure 0..1 and monotonic
+                for (let i = 1; i < a.length; i++) {
+                    if (a[i] < a[i - 1]) return null;
+                }
+                const min = a[0];
+                const max = a[a.length - 1];
+                if (Math.abs(min) > 1e-9 || Math.abs(max - 1) > 1e-6) {
+                    // Normalize to [0,1]
+                    const len = max - min;
+                    if (len <= 0) return null;
+                    for (let i = 0; i < a.length; i++) a[i] = (a[i] - min) / len;
+                }
+                return a;
+            } else if (arr.length === this.gridSize) {
+                // widths
+                const w = arr.map(Number);
+                if (w.some(v => !isFinite(v) || v <= 0)) return null;
+                const sum = w.reduce((p, c) => p + c, 0);
+                const norm = w.map(v => v / sum);
+                const points = [0];
+                let acc = 0;
+                for (let i = 0; i < norm.length; i++) { acc += norm[i]; points.push(acc); }
+                points[points.length - 1] = 1;
+                return points;
+            }
+            return null;
+        };
+
+        const x = validateAndNormalize(xArr);
+        const y = validateAndNormalize(yArr);
+        if (x && y) {
+            this.xPoints = x;
+            this.yPoints = y;
+            return true;
+        }
+        return false;
     }
 
     // Compute state inventories (O(n²) operation, cached until invalidated)
@@ -276,13 +394,37 @@ export class GridCore {
         };
     }
 
+    // Clear the grid to an empty state without creating any initial pattern.
+    // Keeps grid size, targetArea, and existing non-uniform grid points intact.
+    clearGrid() {
+        // Create an empty grid
+        this.grid = Array(this.gridSize).fill(null).map(() =>
+            Array(this.gridSize).fill(this.STATES.EMPTY)
+        );
+
+        // Reset area counters
+        this.totalArea = 0;
+
+        // Invalidate inventories due to bulk change
+        this.invalidateStateInventories();
+
+        return {
+            grid: this.grid,
+            totalArea: this.totalArea,
+            targetArea: this.targetArea
+        };
+    }
+
     reset() {
         return this.initializeGrid();
     }
 
     resize(newSize) {
         this.gridSize = newSize;
-        return this.initializeGrid();
+        const result = this.initializeGrid();
+        // Clamp existing markers to new grid size
+        this._clampMarkersToGrid();
+        return result;
     }
 
     // Convert grid to numeric representation for convolution
@@ -317,5 +459,127 @@ export class GridCore {
             areaRatio: this.totalArea / this.targetArea,
             stateDistribution: stateCounts
         };
+    }
+
+    // =========================
+    // Boundary Markers API
+    // =========================
+
+    // Public: Replace all boundary markers with provided spec
+    // spec: { group1: Marker[], group2: Marker[] }
+    // Marker: { side: 'top'|'right'|'bottom'|'left', start: int, length: int }
+    setBoundaryMarkers(spec) {
+        const sides = new Set(['top', 'right', 'bottom', 'left']);
+        const normalizeMarker = (m) => {
+            if (!m || !sides.has(String(m.side).toLowerCase())) return null;
+            const side = String(m.side).toLowerCase();
+            let start = Math.max(0, Math.floor(Number(m.start)));
+            let length = Math.max(0, Math.floor(Number(m.length)));
+            // Clamp length so it doesn't overflow gridSize when placed at start
+            length = Math.min(length, this.gridSize - start);
+            if (length <= 0) return null;
+            return { side, start, length };
+        };
+
+        // Occupancy per side to ensure no overlaps across both groups
+        const occ = {
+            top: new Array(this.gridSize).fill(false),
+            right: new Array(this.gridSize).fill(false),
+            bottom: new Array(this.gridSize).fill(false),
+            left: new Array(this.gridSize).fill(false)
+        };
+
+        const out = {
+            group1: { top: [], right: [], bottom: [], left: [] },
+            group2: { top: [], right: [], bottom: [], left: [] }
+        };
+
+        const errors = [];
+
+        const applyGroup = (groupName, list) => {
+            if (!Array.isArray(list)) return;
+            for (const raw of list) {
+                const m = normalizeMarker(raw);
+                if (!m) {
+                    errors.push(`${groupName}: invalid marker ${JSON.stringify(raw)}`);
+                    continue;
+                }
+                // Check overlap on its side
+                let overlaps = false;
+                for (let i = m.start; i < m.start + m.length; i++) {
+                    if (occ[m.side][i]) { overlaps = true; break; }
+                }
+                if (overlaps) {
+                    errors.push(`${groupName}: marker overlaps on ${m.side} at [${m.start},${m.start + m.length - 1}]`);
+                    continue;
+                }
+                // Mark occupancy and accept
+                for (let i = m.start; i < m.start + m.length; i++) occ[m.side][i] = true;
+                out[groupName][m.side].push(m);
+            }
+        };
+
+        applyGroup('group1', spec?.group1 || []);
+        applyGroup('group2', spec?.group2 || []);
+
+        // Commit
+        this.boundaryMarkers = out;
+        return { ok: errors.length === 0, errors, markers: this.getBoundaryMarkers() };
+    }
+
+    // Public: Clear all markers
+    clearBoundaryMarkers() {
+        this.boundaryMarkers = {
+            group1: { top: [], right: [], bottom: [], left: [] },
+            group2: { top: [], right: [], bottom: [], left: [] }
+        };
+    }
+
+    // Public: Get a deep copy of markers
+    getBoundaryMarkers() {
+        const copySide = (s) => s.map(m => ({ side: m.side, start: m.start, length: m.length }));
+        return {
+            group1: {
+                top: copySide(this.boundaryMarkers.group1.top),
+                right: copySide(this.boundaryMarkers.group1.right),
+                bottom: copySide(this.boundaryMarkers.group1.bottom),
+                left: copySide(this.boundaryMarkers.group1.left)
+            },
+            group2: {
+                top: copySide(this.boundaryMarkers.group2.top),
+                right: copySide(this.boundaryMarkers.group2.right),
+                bottom: copySide(this.boundaryMarkers.group2.bottom),
+                left: copySide(this.boundaryMarkers.group2.left)
+            }
+        };
+    }
+
+    // Internal: Clamp markers when grid size changes
+    _clampMarkersToGrid() {
+        const clampGroup = (group) => {
+            for (const side of ['top', 'right', 'bottom', 'left']) {
+                const arr = group[side];
+                const clamped = [];
+                const occ = new Array(this.gridSize).fill(false);
+                for (const m of arr) {
+                    let start = Math.max(0, Math.min(this.gridSize - 1, Math.floor(m.start)));
+                    let length = Math.max(0, Math.floor(m.length));
+                    length = Math.min(length, this.gridSize - start);
+                    if (length <= 0) continue;
+                    // Check overlap against already accepted markers for this side
+                    let overlaps = false;
+                    for (let i = start; i < start + length; i++) {
+                        if (occ[i]) { overlaps = true; break; }
+                    }
+                    if (overlaps) continue;
+                    for (let i = start; i < start + length; i++) occ[i] = true;
+                    clamped.push({ side, start, length });
+                }
+                group[side] = clamped;
+            }
+        };
+
+        clampGroup(this.boundaryMarkers.group1);
+        clampGroup(this.boundaryMarkers.group2);
     }
 }

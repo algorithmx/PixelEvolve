@@ -20,6 +20,7 @@ export class UIController {
             stepBtn: '#step-btn',
             resetBtn: '#reset-btn',
             randomBtn: '#random-btn',
+            snapshotBtn: '#snapshot-btn',
             gridCanvas: '#grid-canvas',
             gridSizeSelect: '#grid-size-select',
             speedSlider: '#speed-slider',
@@ -48,7 +49,21 @@ export class UIController {
             isingJ2Value: '#ising-j2-value',
             presetSelect: '#preset-select',
             maxStepsSlider: '#max-steps',
-            maxStepsValue: '#max-steps-value'
+            maxStepsValue: '#max-steps-value',
+            // Non-uniform grid controls
+            gridXPointsInput: '#grid-x-points',
+            gridYPointsInput: '#grid-y-points',
+            gridPointsApplyBtn: '#grid-points-apply',
+            gridPointsRandomBtn: '#grid-points-random',
+            gridPointsUniformBtn: '#grid-points-uniform',
+            gridPointsJitterSlider: '#grid-points-jitter',
+            gridPointsJitterValue: '#grid-points-jitter-value'
+            ,
+            // Boundary markers controls
+            markersGroup1Input: '#markers-group1',
+            markersGroup2Input: '#markers-group2',
+            markersApplyBtn: '#markers-apply',
+            markersClearBtn: '#markers-clear'
         };
 
         // Initialize status monitoring
@@ -327,6 +342,11 @@ export class UIController {
             randomBtn.addEventListener('click', handlers.onRandomize);
         }
 
+        const snapshotBtn = this.getElement(this.selectors.snapshotBtn);
+        if (snapshotBtn && handlers.onSnapshot) {
+            snapshotBtn.addEventListener('click', handlers.onSnapshot);
+        }
+
         // Grid size
         const gridSizeSelect = this.getElement(this.selectors.gridSizeSelect);
         if (gridSizeSelect && handlers.onGridSizeChange) {
@@ -472,7 +492,134 @@ export class UIController {
             });
         }
 
+        // Non-uniform grid controls
+        const applyBtn = this.getElement(this.selectors.gridPointsApplyBtn);
+        if (applyBtn && handlers.onGridPointsApply) {
+            applyBtn.addEventListener('click', () => {
+                const { xPoints, yPoints, error } = this.getGridPointsInputs();
+                if (error) {
+                    this.showMessage(error, 'error');
+                } else {
+                    handlers.onGridPointsApply({ xPoints, yPoints });
+                }
+            });
+        }
+
+    const gridRandomBtn = this.getElement(this.selectors.gridPointsRandomBtn);
+        const jitterSlider = this.getElement(this.selectors.gridPointsJitterSlider);
+        const jitterValue = this.getElement(this.selectors.gridPointsJitterValue);
+        if (jitterSlider) {
+            jitterSlider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                if (jitterValue) jitterValue.textContent = val.toFixed(2);
+            });
+        }
+        if (gridRandomBtn && handlers.onGridPointsRandom) {
+            gridRandomBtn.addEventListener('click', () => {
+                const val = parseFloat(jitterSlider?.value || '0.35');
+                handlers.onGridPointsRandom(isFinite(val) ? val : 0.35);
+            });
+        }
+
+        const uniformBtn = this.getElement(this.selectors.gridPointsUniformBtn);
+        if (uniformBtn && handlers.onGridPointsUniform) {
+            uniformBtn.addEventListener('click', () => handlers.onGridPointsUniform());
+        }
+
+        // Boundary markers controls
+        const markersApply = this.getElement(this.selectors.markersApplyBtn);
+        if (markersApply && handlers.onMarkersApply) {
+            markersApply.addEventListener('click', () => {
+                const parseResult = this.getMarkerInputs();
+                if (parseResult.error) {
+                    this.showMessage(parseResult.error, 'error');
+                } else {
+                    handlers.onMarkersApply(parseResult.spec);
+                }
+            });
+        }
+
+        const markersClear = this.getElement(this.selectors.markersClearBtn);
+        if (markersClear && handlers.onMarkersClear) {
+            markersClear.addEventListener('click', () => handlers.onMarkersClear());
+        }
+
         this.log('Event handlers bound');
+    }
+
+    // Parse grid points from UI inputs; accept either N+1 boundaries or N widths
+    getGridPointsInputs() {
+        const xText = this.getElement(this.selectors.gridXPointsInput)?.value || '';
+        const yText = this.getElement(this.selectors.gridYPointsInput)?.value || '';
+        const parse = (txt) => txt
+            .split(/[,\s]+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+            .map(Number);
+        try {
+            const x = parse(xText);
+            const y = parse(yText);
+            if (x.length === 0 || y.length === 0) {
+                return { error: 'Please enter X and Y grid points.' };
+            }
+            return { xPoints: x, yPoints: y };
+        } catch (e) {
+            return { error: 'Invalid number format in grid points.' };
+        }
+    }
+
+    // Parse boundary marker inputs from UI into spec
+    // Input format per group: comma-separated entries like "top:0-4" or "left:3:5"
+    // Returns { spec: {group1: Marker[], group2: Marker[] } } or { error }
+    getMarkerInputs() {
+        const g1Text = this.getElement(this.selectors.markersGroup1Input)?.value || '';
+        const g2Text = this.getElement(this.selectors.markersGroup2Input)?.value || '';
+
+        const parseGroup = (text) => {
+            const entries = text.split(',').map(s => s.trim()).filter(Boolean);
+            const markers = [];
+            for (const e of entries) {
+                const m = this.parseMarkerEntry(e);
+                if (!m) return { error: `Invalid marker entry: "${e}"` };
+                markers.push(m);
+            }
+            return { markers };
+        };
+
+        const r1 = parseGroup(g1Text);
+        if (r1.error) return { error: r1.error };
+        const r2 = parseGroup(g2Text);
+        if (r2.error) return { error: r2.error };
+
+        return { spec: { group1: r1.markers, group2: r2.markers } };
+    }
+
+    // Parse a single marker entry string into {side,start,length}
+    parseMarkerEntry(entry) {
+        if (!entry) return null;
+        const sides = ['top','right','bottom','left'];
+        const [sideRaw, restRaw] = entry.split(':').map(s => s.trim());
+        const side = sideRaw?.toLowerCase();
+        if (!sides.includes(side) || !restRaw) return null;
+        // Support two forms: start-end (inclusive), or start:length
+        let start, length;
+        if (restRaw.includes('-')) {
+            const [a, b] = restRaw.split('-').map(s => parseInt(s.trim(), 10));
+            if (!isFinite(a) || !isFinite(b)) return null;
+            start = Math.min(a, b);
+            const end = Math.max(a, b);
+            length = end - start + 1;
+        } else if (restRaw.includes(':')) {
+            const [a, b] = restRaw.split(':').map(s => parseInt(s.trim(), 10));
+            if (!isFinite(a) || !isFinite(b)) return null;
+            start = a; length = b;
+        } else {
+            // Also allow start only -> length 1
+            const a = parseInt(restRaw, 10);
+            if (!isFinite(a)) return null;
+            start = a; length = 1;
+        }
+        return { side, start, length };
     }
 
     // Bind canvas click handler
@@ -703,6 +850,67 @@ export class UIController {
                 </div>
             `;
         }
+    }
+
+    // Show temporary message (success or error)
+    showMessage(message, type = 'info') {
+        // Create or reuse toast container
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                max-width: 400px;
+            `;
+            document.body.appendChild(toastContainer);
+        }
+
+        // Create toast element
+        const toast = document.createElement('div');
+        const bgColor = type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#d1ecf1';
+        const borderColor = type === 'success' ? '#c3e6cb' : type === 'error' ? '#f5c6cb' : '#bee5eb';
+        const textColor = type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#0c5460';
+
+        toast.style.cssText = `
+            background-color: ${bgColor};
+            border: 1px solid ${borderColor};
+            color: ${textColor};
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s ease-out;
+        `;
+        toast.textContent = message;
+
+        // Add animation
+        const style = document.createElement('style');
+        if (!document.getElementById('toast-animation')) {
+            style.id = 'toast-animation';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(400px); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(400px); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        toastContainer.appendChild(toast);
+
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease-out forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
     }
 
     // Hide loading indicator
